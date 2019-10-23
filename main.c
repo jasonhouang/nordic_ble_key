@@ -43,10 +43,16 @@
 #define APP_COMPANY_IDENTIFIER          0x0059                            /**< Company identifier for Nordic Semiconductor ASA. as per www.bluetooth.org. */
 #define APP_MAJOR_VALUE                 0x01, 0x02                        /**< Major value used to identify Beacons. */
 #define APP_MINOR_VALUE                 0x03, 0x04                        /**< Minor value used to identify Beacons. */
-#define APP_BEACON_UUID                 0x01, 0x12, 0x23, 0x34, \
-                                        0x45, 0x56, 0x67, 0x78, \
-                                        0x89, 0x9a, 0xab, 0xbc, \
-                                        0xcd, 0xde, 0xef, 0xf0            /**< Proprietary UUID for Beacon. */
+
+#define KEY_BEACON_UUID                 0xE7, 0xFC, 0x9D, 0x3C, \
+                                        0xEF, 0x01, 0x4B, 0x70, \
+                                        0xB2, 0x80, 0x2C, 0xF6, \
+                                        0xD5, 0x0F, 0xA5, 0xCA            /**< UUID for BlE-Key: E7FC9D3C-EF01-4B70-B280-2CF6D50FA5CA */
+
+#define BAT_BEACON_UUID                 0x8B, 0x91, 0xB3, 0xDF, \
+                                        0xEF, 0x01, 0x42, 0xA1, \
+                                        0xAF, 0x92, 0x25, 0xC2, \
+                                        0x20, 0xA2, 0x4A, 0xAD            /**< UUID for LOW_BAT: 8B91B3DF-EF01-42A1-AF92-25C220A24AAD */
 
 #define DEVICE_NAME                     "Nordic_UART"                               /**< Name of device. Will be included in the advertising data. */
 #define NUS_SERVICE_UUID_TYPE           BLE_UUID_TYPE_VENDOR_BEGIN                  /**< UUID type for the Nordic UART Service (vendor specific). */
@@ -93,7 +99,7 @@ static uint8_t m_beacon_info[APP_BEACON_INFO_LENGTH] =                    /**< I
     // implementation.
     APP_ADV_DATA_LENGTH, // Manufacturer specific information. Specifies the length of the
     // manufacturer specific data in this implementation.
-    APP_BEACON_UUID,     // 128 bit UUID value.
+    KEY_BEACON_UUID,     // 128 bit UUID value.
     APP_MAJOR_VALUE,     // Major arbitrary value that can be used to distinguish between Beacons.
     APP_MINOR_VALUE,     // Minor arbitrary value that can be used to distinguish between Beacons.
     APP_MEASURED_RSSI    // Manufacturer specific information. The Beacon's measured TX power in
