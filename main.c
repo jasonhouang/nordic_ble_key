@@ -89,7 +89,11 @@
 #define APP_BLE_OBSERVER_PRIO           3                                           /**< Application's BLE observer priority. You shouldn't need to modify this value. */
 
 #define APP_ADV_INTERVAL                64                                          /**< The advertising interval (in units of 0.625 ms. This value corresponds to 40 ms). */
-#define APP_ADV_TIMEOUT_IN_SECONDS      180                                         /**< The advertising timeout (in units of seconds). */
+#define APP_ADV_TIMEOUT_IN_SECONDS      0                                         /**< The advertising timeout (in units of seconds). */
+
+#define SCAN_INTERVAL           0x00A0                                  /**< Determines scan interval in units of 0.625 millisecond. */
+#define SCAN_WINDOW             0x0050                                  /**< Determines scan window in units of 0.625 millisecond. */
+#define SCAN_TIMEOUT            0x0000                                  /**< Timout when scanning. 0x0000 disables timeout. */
 
 #define MIN_CONN_INTERVAL               MSEC_TO_UNITS(20, UNIT_1_25_MS)             /**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
 #define MAX_CONN_INTERVAL               MSEC_TO_UNITS(75, UNIT_1_25_MS)             /**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
@@ -101,7 +105,7 @@
 
 #define DEAD_BEEF                       0xDEADBEEF                                  /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
 
-#define UART_TX_BUF_SIZE                256                                         /**< UART TX buffer size. */
+#define UART_TX_BUF_SIZE                512                                         /**< UART TX buffer size. */
 #define UART_RX_BUF_SIZE                256                                         /**< UART RX buffer size. */
 
 
@@ -117,6 +121,7 @@ static ble_uuid_t m_adv_uuids[]          =                                      
 };
 
 
+static void get_local_mac_addr(void);
 /**@brief Function for assert macro callback.
  *
  * @details This function will be called in case of an assert in the SoftDevice.
@@ -499,6 +504,13 @@ void bsp_event_handler(bsp_event_t event)
     uint32_t err_code;
     switch (event)
     {
+        case BSP_EVENT_KEY_0:
+            printf("key0 \r\n");
+            break;
+        case BSP_EVENT_KEY_1:
+            printf("key1 \r\n");
+            break;
+#if 0
         case BSP_EVENT_SLEEP:
             sleep_mode_enter();
             break;
@@ -522,6 +534,7 @@ void bsp_event_handler(bsp_event_t event)
             }
             break;
 
+#endif
         default:
             break;
     }
@@ -547,7 +560,7 @@ void uart_event_handle(app_uart_evt_t * p_event)
             UNUSED_VARIABLE(app_uart_get(&data_array[index]));
             index++;
 
-            if ((data_array[index - 1] == '\n') || (index >= (m_ble_nus_max_data_len)))
+            if ((data_array[index - 1] == '\n') || (data_array[index - 1] == '\r')  || (index >= (m_ble_nus_max_data_len)))
             {
                 NRF_LOG_DEBUG("Ready to send data over BLE NUS");
                 NRF_LOG_HEXDUMP_DEBUG(data_array, index);
@@ -602,7 +615,7 @@ static void uart_init(void)
                        UART_RX_BUF_SIZE,
                        UART_TX_BUF_SIZE,
                        uart_event_handle,
-                       APP_IRQ_PRIORITY_LOWEST,
+                       APP_IRQ_PRIORITY_HIGHEST,/*APP_IRQ_PRIORITY_LOWEST,*/
                        err_code);
     APP_ERROR_CHECK(err_code);
 }
@@ -620,7 +633,7 @@ static void advertising_init(void)
 
     init.advdata.name_type          = BLE_ADVDATA_FULL_NAME;
     init.advdata.include_appearance = false;
-    init.advdata.flags              = BLE_GAP_ADV_FLAGS_LE_ONLY_LIMITED_DISC_MODE;
+    init.advdata.flags              = BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE;//BLE_GAP_ADV_FLAGS_LE_ONLY_LIMITED_DISC_MODE;
 
     init.srdata.uuids_complete.uuid_cnt = sizeof(m_adv_uuids) / sizeof(m_adv_uuids[0]);
     init.srdata.uuids_complete.p_uuids  = m_adv_uuids;
@@ -637,7 +650,124 @@ static void advertising_init(void)
     ble_advertising_conn_cfg_tag_set(&m_advertising, APP_BLE_CONN_CFG_TAG);
 }
 
+#if 1
+/**@brief Function for handling button events from app_button IRQ
+ *
+ * @param[in] pin_no        Pin of the button for which an event has occured
+ * @param[in] button_action Press or Release
+ */
+static void button_evt_handler(uint8_t pin_no, uint8_t button_action)
+{
+    static bool flag_state_lock = false;
 
+    if (pin_no == BUTTON_OPEN_PIN)
+    {
+        if (button_action == APP_BUTTON_PUSH)
+        {
+            printf("open key push\r\n");
+            get_local_mac_addr();
+        }
+        else
+        {
+            printf("open key release\r\n");
+        }
+    }
+#if 0
+            flag_button_close_down = true;
+            led_on();
+            app_timer_start(m_timer_button, APP_TIMER_TICKS(50), NULL);
+            if(flag_state_lock)
+            {
+                flag_button_close_event_pending = true;
+                flag_state_lock = false;
+            }
+            else
+            {
+                flag_button_open_event_pending = true;
+                flag_state_lock = true;
+            }
+        }
+        else
+        {
+            flag_button_close_down = false;
+            led_off();
+        }
+#endif
+    if (pin_no == BUTTON_CLOSE_PIN)
+    {
+        if (button_action == APP_BUTTON_PUSH)
+        {
+            printf("close key push\r\n");
+        }
+        else
+        {
+            printf("close key release\r\n");
+        }
+#if 0
+            flag_button_open_down = true;
+            led_on();
+            app_timer_start(m_timer_button, APP_TIMER_TICKS(50), NULL);
+            if(flag_state_lock)
+            {
+                flag_button_close_event_pending = true;
+                flag_state_lock = false;
+            }
+            else
+            {
+                flag_button_open_event_pending = true;
+                flag_state_lock = true;
+            }
+        }
+        else
+        {
+            led_off();
+            flag_button_open_down = false;
+        }
+#endif
+    }
+}
+
+/**
+ * @brief Function for initializing the registation button
+ *
+ * @retval Values returned by @ref app_button_init
+ * @retval Values returned by @ref app_button_enable
+ */
+static void button_init(void)
+{
+    ret_code_t              err_code;
+    const uint8_t           buttons_cnt  = 2;
+    static app_button_cfg_t buttons_cfgs[2] = {
+        {
+            .pin_no         = BUTTON_OPEN_PIN,
+            .active_state   = APP_BUTTON_ACTIVE_LOW,
+            .pull_cfg       = NRF_GPIO_PIN_NOPULL,//UP,
+            .button_handler = button_evt_handler
+        },
+        {
+            .pin_no         = BUTTON_CLOSE_PIN,
+            .active_state   = APP_BUTTON_ACTIVE_LOW,
+            .pull_cfg       = NRF_GPIO_PIN_NOPULL,//UP,
+            .button_handler = button_evt_handler
+        }};
+
+    err_code = app_button_init(buttons_cfgs, buttons_cnt, APP_TIMER_TICKS(10));
+    APP_ERROR_CHECK(err_code);
+
+    err_code = app_button_enable();
+    APP_ERROR_CHECK(err_code);
+}
+
+static void buttons_leds_init(bool * p_erase_bonds)
+{
+    uint32_t err_code = bsp_init(BSP_INIT_LED, NULL);
+    APP_ERROR_CHECK(err_code);
+
+    button_init();
+}
+#endif
+
+#if 0
 /**@brief Function for initializing buttons and leds.
  *
  * @param[out] p_erase_bonds  Will be true if the clear bonding button was pressed to wake the application up.
@@ -654,7 +784,7 @@ static void buttons_leds_init(bool * p_erase_bonds)
 
     *p_erase_bonds = (startup_event == BSP_EVENT_CLEAR_BONDING_DATA);
 }
-
+#endif
 
 /**@brief Function for initializing the nrf log module.
  */
@@ -673,6 +803,104 @@ static void power_manage(void)
 {
     uint32_t err_code = sd_app_evt_wait();
     APP_ERROR_CHECK(err_code);
+}
+
+static ble_gap_irk_t set_irk = {{0x04, 0xF3, 0x29, 0x46, 0x84, 0x3F, 0x32, 0x8A, 0xCF, 0xAA, 0x85, 0x26, 0xEC, 0x50, 0x6C, 0x2D}};
+
+static void privacy_on(void)
+{
+    ret_code_t               err_code;
+    ble_gap_privacy_params_t privacy_params;
+
+    // Privacy settings cannot be changed while advertising, scanning, or creating a connection.
+    //scan_stop();
+    //adv_stop();
+    //err_code = sd_ble_gap_connect_cancel();
+    //APP_ERROR_CHECK(err_code);
+
+    privacy_params.p_device_irk         = NULL;
+    err_code = sd_ble_gap_privacy_get(&privacy_params);
+    APP_ERROR_CHECK(err_code);
+    printf("privacy_params.privacy_mode = %x\r\n", privacy_params.privacy_mode);
+    printf("privacy_params.private_addr_type = %x\r\n", privacy_params.private_addr_type);
+    printf("privacy_params.private_addr_cycle_s = %x\r\n", privacy_params.private_addr_cycle_s);
+    if (privacy_params.p_device_irk)
+    {
+        printf("privacy_params.p_device_irk = 0x%ln\r\n", (uint32_t *)&privacy_params.p_device_irk->irk[0]);
+    }
+
+    memset(&privacy_params, 0, sizeof(privacy_params));
+
+    // Privacy setting.
+    privacy_params.privacy_mode         = BLE_GAP_PRIVACY_MODE_DEVICE_PRIVACY;
+    privacy_params.private_addr_type    = BLE_GAP_ADDR_TYPE_RANDOM_PRIVATE_RESOLVABLE;
+    privacy_params.private_addr_cycle_s = 60;//BLE_GAP_DEFAULT_PRIVATE_ADDR_CYCLE_INTERVAL_S;
+    privacy_params.p_device_irk         = &set_irk;
+
+    // Set privacy.
+    err_code = sd_ble_gap_privacy_set(&privacy_params);
+    APP_ERROR_CHECK(err_code);
+
+    // Set device indentities list.
+    err_code = sd_ble_gap_device_identities_set(NULL, NULL, 1);//NRF_SDH_BLE_PERIPHERAL_LINK_COUNT);
+    APP_ERROR_CHECK(err_code);
+
+    privacy_params.p_device_irk         = NULL;
+    err_code = sd_ble_gap_privacy_get(&privacy_params);
+    APP_ERROR_CHECK(err_code);
+    printf("privacy_params.privacy_mode = %x\r\n", privacy_params.privacy_mode);
+    printf("privacy_params.private_addr_type = %x\r\n", privacy_params.private_addr_type);
+    printf("privacy_params.private_addr_cycle_s = %x\r\n", privacy_params.private_addr_cycle_s);
+    if (privacy_params.p_device_irk)
+    {
+        printf("privacy_params.p_device_irk = 0x%ln\r\n", (uint32_t *)&privacy_params.p_device_irk->irk[0]);
+    }
+}
+
+static void set_local_mac_addr(void)
+{
+    ret_code_t ret;
+
+    ble_gap_addr_t own_addr = {
+        .addr_type = BLE_GAP_ADDR_TYPE_PUBLIC,
+        .addr = {0xe6, 0x59, 0xc5, 0xb2, 0xf2, 0x64}
+    };
+
+    ret = sd_ble_gap_addr_set(&own_addr);
+    APP_ERROR_CHECK(ret);
+}
+
+static void get_local_mac_addr(void)
+{
+    ble_gap_addr_t own_addr;
+
+    sd_ble_gap_addr_get(&own_addr);
+    printf("type:%x mac: %02x:%02x:%02x:%02x:%02x:%02x\r\n", own_addr.addr_type,
+            own_addr.addr[5],own_addr.addr[4],
+            own_addr.addr[3],own_addr.addr[2],
+            own_addr.addr[1],own_addr.addr[0]);
+}
+
+/** @brief Parameters used when scanning. */
+static ble_gap_scan_params_t const m_scan_params =
+{
+    .active   = 1,
+    .interval = SCAN_INTERVAL,
+    .window   = SCAN_WINDOW,
+    .timeout  = SCAN_TIMEOUT,
+    .use_whitelist = 0,
+};
+
+/**@brief Function to start scanning. */
+static void scan_start(void)
+{
+    ret_code_t ret;
+
+    ret = sd_ble_gap_scan_start(&m_scan_params);
+    APP_ERROR_CHECK(ret);
+
+//    ret = bsp_indication_set(BSP_INDICATE_SCANNING);
+//    APP_ERROR_CHECK(ret);
 }
 
 
@@ -697,11 +925,14 @@ int main(void)
     services_init();
     advertising_init();
     conn_params_init();
-
-    printf("\r\nUART Start!\r\n");
-    NRF_LOG_INFO("UART Start!");
+    printf("\r\nApplication Start!\r\n");
+    privacy_on();
+    //set_local_mac_addr();
+    get_local_mac_addr();
+    NRF_LOG_INFO("Application Start!");
     err_code = ble_advertising_start(&m_advertising, BLE_ADV_MODE_FAST);
     APP_ERROR_CHECK(err_code);
+    scan_start();
 
     // Enter main loop.
     for (;;)
