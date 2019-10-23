@@ -1,55 +1,3 @@
-/**
- * Copyright (c) 2014 - 2017, Nordic Semiconductor ASA
- * 
- * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- * 
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- * 
- * 2. Redistributions in binary form, except as embedded into a Nordic
- *    Semiconductor ASA integrated circuit in a product or a software update for
- *    such product, must reproduce the above copyright notice, this list of
- *    conditions and the following disclaimer in the documentation and/or other
- *    materials provided with the distribution.
- * 
- * 3. Neither the name of Nordic Semiconductor ASA nor the names of its
- *    contributors may be used to endorse or promote products derived from this
- *    software without specific prior written permission.
- * 
- * 4. This software, with or without modification, must only be used with a
- *    Nordic Semiconductor ASA integrated circuit.
- * 
- * 5. Any software provided in binary form under this license must not be reverse
- *    engineered, decompiled, modified and/or disassembled.
- * 
- * THIS SOFTWARE IS PROVIDED BY NORDIC SEMICONDUCTOR ASA "AS IS" AND ANY EXPRESS
- * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL NORDIC SEMICONDUCTOR ASA OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
- * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
- * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- * 
- */
-/** @file
- *
- * @defgroup ble_sdk_uart_over_ble_main main.c
- * @{
- * @ingroup  ble_sdk_app_nus_eval
- * @brief    UART over BLE application main file.
- *
- * This file contains the source code for a sample application that uses the Nordic UART service.
- * This application uses the @ref srvlib_conn_params module.
- */
-
-
-
 #include <stdint.h>
 #include <string.h>
 #include "nordic_common.h"
@@ -67,6 +15,10 @@
 #include "app_uart.h"
 #include "app_util_platform.h"
 #include "bsp_btn_ble.h"
+#include "nrf_delay.h"
+//#include "nrf_wdt.h"
+#include "nrf_drv_wdt.h"
+#include "nrf_drv_power.h"
 
 #if defined (UART_PRESENT)
 #include "nrf_uart.h"
@@ -697,6 +649,7 @@ static void button_evt_handler(uint8_t pin_no, uint8_t button_action)
     {
         if (button_action == APP_BUTTON_PUSH)
         {
+            uart_init();
             printf("close key push\r\n");
         }
         else
@@ -903,6 +856,75 @@ static void scan_start(void)
 //    APP_ERROR_CHECK(ret);
 }
 
+static void wdt_event_handler(void)
+{
+}
+
+nrf_drv_wdt_channel_id m_channel_id;
+
+static void wdt_feed(void)
+{ 
+    nrf_drv_wdt_channel_feed(m_channel_id);
+}
+
+static void wdt_init(void)
+{
+    uint32_t err_code;
+
+    nrf_drv_wdt_config_t config = NRF_DRV_WDT_DEAFULT_CONFIG;
+    err_code = nrf_drv_wdt_init(&config, wdt_event_handler);
+    APP_ERROR_CHECK(err_code);
+
+    err_code = nrf_drv_wdt_channel_alloc(&m_channel_id);
+    APP_ERROR_CHECK(err_code);
+
+    nrf_drv_wdt_enable();
+}
+
+static void log_resetreason(void)
+{
+    /* Reset reason */
+    uint32_t rr = nrf_power_resetreas_get();
+    NRF_LOG_INFO("Reset reasons:");
+    printf("Reset reasons: ");
+    if (0 == rr)
+    {
+        NRF_LOG_INFO("- NONE");
+        printf("- NONE\r\n");
+    }
+    if (0 != (rr & NRF_POWER_RESETREAS_RESETPIN_MASK))
+    {
+        NRF_LOG_INFO("- RESETPIN");
+        printf("- RESETPIN\r\n");
+    }
+    if (0 != (rr & NRF_POWER_RESETREAS_DOG_MASK     ))
+    {
+        NRF_LOG_INFO("- DOG");
+        printf("- DOG\r\n");
+    }
+    if (0 != (rr & NRF_POWER_RESETREAS_SREQ_MASK    ))
+    {
+        NRF_LOG_INFO("- SREQ");
+        printf("- SREQ\r\n");
+    }
+    if (0 != (rr & NRF_POWER_RESETREAS_LOCKUP_MASK  ))
+    {
+        NRF_LOG_INFO("- LOCKUP");
+        printf("- LOCKUP\r\n");
+    }
+    if (0 != (rr & NRF_POWER_RESETREAS_OFF_MASK     ))
+    {
+        NRF_LOG_INFO("- OFF");
+        printf("- OFF\r\n");
+    }
+    if (0 != (rr & NRF_POWER_RESETREAS_DIF_MASK     ))
+    {
+        NRF_LOG_INFO("- DIF");
+        printf("- DIF\r\n");
+    }
+
+    nrf_power_resetreas_clear(nrf_power_resetreas_get());
+}
 
 /**@brief Application main function.
  */
@@ -917,6 +939,7 @@ int main(void)
 
     uart_init();
     log_init();
+    wdt_init();
 
     buttons_leds_init(&erase_bonds);
     ble_stack_init();
@@ -926,6 +949,7 @@ int main(void)
     advertising_init();
     conn_params_init();
     printf("\r\nApplication Start!\r\n");
+    log_resetreason();
     privacy_on();
     //set_local_mac_addr();
     get_local_mac_addr();
@@ -933,10 +957,14 @@ int main(void)
     err_code = ble_advertising_start(&m_advertising, BLE_ADV_MODE_FAST);
     APP_ERROR_CHECK(err_code);
     scan_start();
+    nrf_delay_ms(1000);
+    err_code = app_uart_close();
+    APP_ERROR_CHECK(err_code);
 
     // Enter main loop.
     for (;;)
     {
+        wdt_feed();
         UNUSED_RETURN_VALUE(NRF_LOG_PROCESS());
         power_manage();
     }
