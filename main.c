@@ -16,7 +16,6 @@
 #include "app_util_platform.h"
 #include "bsp_btn_ble.h"
 #include "nrf_delay.h"
-//#include "nrf_wdt.h"
 #include "nrf_drv_wdt.h"
 #include "nrf_drv_power.h"
 
@@ -34,6 +33,20 @@
 #define APP_BLE_CONN_CFG_TAG            1                                           /**< A tag identifying the SoftDevice BLE configuration. */
 
 #define APP_FEATURE_NOT_SUPPORTED       BLE_GATT_STATUS_ATTERR_APP_BEGIN + 2        /**< Reply when unsupported features are requested. */
+
+#define NON_CONNECTABLE_ADV_INTERVAL    MSEC_TO_UNITS(100, UNIT_0_625_MS) /**< The advertising interval for non-connectable advertisement (100 ms). This value can vary between 100ms to 10.24s). */
+
+#define APP_BEACON_INFO_LENGTH          0x17                              /**< Total length of information advertised by the Beacon. */
+#define APP_ADV_DATA_LENGTH             0x15                              /**< Length of manufacturer specific data in the advertisement. */
+#define APP_DEVICE_TYPE                 0x02                              /**< 0x02 refers to Beacon. */
+#define APP_MEASURED_RSSI               0xC3                              /**< The Beacon's measured RSSI at 1 meter distance in dBm. */
+#define APP_COMPANY_IDENTIFIER          0x0059                            /**< Company identifier for Nordic Semiconductor ASA. as per www.bluetooth.org. */
+#define APP_MAJOR_VALUE                 0x01, 0x02                        /**< Major value used to identify Beacons. */
+#define APP_MINOR_VALUE                 0x03, 0x04                        /**< Minor value used to identify Beacons. */
+#define APP_BEACON_UUID                 0x01, 0x12, 0x23, 0x34, \
+                                        0x45, 0x56, 0x67, 0x78, \
+                                        0x89, 0x9a, 0xab, 0xbc, \
+                                        0xcd, 0xde, 0xef, 0xf0            /**< Proprietary UUID for Beacon. */
 
 #define DEVICE_NAME                     "Nordic_UART"                               /**< Name of device. Will be included in the advertising data. */
 #define NUS_SERVICE_UUID_TYPE           BLE_UUID_TYPE_VENDOR_BEGIN                  /**< UUID type for the Nordic UART Service (vendor specific). */
@@ -72,8 +85,36 @@ static ble_uuid_t m_adv_uuids[]          =                                      
     {BLE_UUID_NUS_SERVICE, NUS_SERVICE_UUID_TYPE}
 };
 
+static ble_gap_adv_params_t m_adv_params;                                 /**< Parameters to be passed to the stack when starting advertising. */
+
+static uint8_t m_beacon_info[APP_BEACON_INFO_LENGTH] =                    /**< Information advertised by the Beacon. */
+{
+    APP_DEVICE_TYPE,     // Manufacturer specific information. Specifies the device type in this
+    // implementation.
+    APP_ADV_DATA_LENGTH, // Manufacturer specific information. Specifies the length of the
+    // manufacturer specific data in this implementation.
+    APP_BEACON_UUID,     // 128 bit UUID value.
+    APP_MAJOR_VALUE,     // Major arbitrary value that can be used to distinguish between Beacons.
+    APP_MINOR_VALUE,     // Minor arbitrary value that can be used to distinguish between Beacons.
+    APP_MEASURED_RSSI    // Manufacturer specific information. The Beacon's measured TX power in
+        // this implementation.
+};
 
 static void get_local_mac_addr(void);
+
+/**@brief Function for starting advertising.
+ */
+static void advertising_start(void)
+{
+    ret_code_t err_code;
+
+    err_code = sd_ble_gap_adv_start(&m_adv_params, APP_BLE_CONN_CFG_TAG);
+    APP_ERROR_CHECK(err_code);
+
+    err_code = bsp_indication_set(BSP_INDICATE_ADVERTISING);
+    APP_ERROR_CHECK(err_code);
+}
+
 /**@brief Function for assert macro callback.
  *
  * @details This function will be called in case of an assert in the SoftDevice.
@@ -576,6 +617,7 @@ static void uart_init(void)
 
 /**@brief Function for initializing the Advertising functionality.
  */
+#if 0
 static void advertising_init(void)
 {
     uint32_t               err_code;
@@ -601,6 +643,40 @@ static void advertising_init(void)
 
     ble_advertising_conn_cfg_tag_set(&m_advertising, APP_BLE_CONN_CFG_TAG);
 }
+#else
+static void advertising_init(void)
+{
+    uint32_t      err_code;
+    ble_advdata_t advdata;
+    uint8_t       flags = BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED;
+
+    ble_advdata_manuf_data_t manuf_specific_data;
+
+    manuf_specific_data.company_identifier = APP_COMPANY_IDENTIFIER;
+
+    manuf_specific_data.data.p_data = (uint8_t *) m_beacon_info;
+    manuf_specific_data.data.size   = APP_BEACON_INFO_LENGTH;
+
+    // Build and set advertising data.
+    memset(&advdata, 0, sizeof(advdata));
+
+    advdata.name_type             = BLE_ADVDATA_NO_NAME;
+    advdata.flags                 = flags;
+    advdata.p_manuf_specific_data = &manuf_specific_data;
+
+    err_code = ble_advdata_set(&advdata, NULL);
+    APP_ERROR_CHECK(err_code);
+
+    // Initialize advertising parameters (used when starting advertising).
+    memset(&m_adv_params, 0, sizeof(m_adv_params));
+
+    m_adv_params.type        = BLE_GAP_ADV_TYPE_ADV_NONCONN_IND;
+    m_adv_params.p_peer_addr = NULL;    // Undirected advertisement.
+    m_adv_params.fp          = BLE_GAP_ADV_FP_ANY;
+    m_adv_params.interval    = NON_CONNECTABLE_ADV_INTERVAL;
+    m_adv_params.timeout     = 0;       // Never time out.
+}
+#endif
 
 #if 1
 /**@brief Function for handling button events from app_button IRQ
@@ -954,8 +1030,9 @@ int main(void)
     //set_local_mac_addr();
     get_local_mac_addr();
     NRF_LOG_INFO("Application Start!");
-    err_code = ble_advertising_start(&m_advertising, BLE_ADV_MODE_FAST);
-    APP_ERROR_CHECK(err_code);
+    //err_code = ble_advertising_start(&m_advertising, BLE_ADV_MODE_FAST);
+    //APP_ERROR_CHECK(err_code);
+    advertising_start();
     scan_start();
     nrf_delay_ms(1000);
     err_code = app_uart_close();
