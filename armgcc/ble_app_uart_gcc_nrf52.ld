@@ -6,7 +6,7 @@ GROUP(-lgcc -lc -lnosys)
 MEMORY
 {
   FLASH (rx) : ORIGIN = 0x23000, LENGTH = 0x0A000
-  RAM (rwx) :  ORIGIN = 0x20003000, LENGTH = 0x3000
+  RAM (rwx) :  ORIGIN = 0x200025D0, LENGTH = 0x3A30
   
 }
 
@@ -40,6 +40,16 @@ SECTIONS
   } > RAM
 
 } INSERT AFTER .data;
+
+SECTIONS
+{
+    .retained_section (NOLOAD) :
+    {
+        PROVIDE(__start_retained_section = .);
+        KEEP(*(.retained_setion))
+        PROVIDE(__stop_retained_section = .);
+    } > RAM
+}
 
 SECTIONS
 {

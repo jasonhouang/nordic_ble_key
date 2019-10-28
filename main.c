@@ -18,6 +18,7 @@
 #include "nrf_delay.h"
 #include "nrf_drv_wdt.h"
 #include "nrf_drv_power.h"
+#include "sys_time.h"
 
 #if defined (UART_PRESENT)
 #include "nrf_uart.h"
@@ -79,10 +80,12 @@
 #define UART_TX_BUF_SIZE                512                                         /**< UART TX buffer size. */
 #define UART_RX_BUF_SIZE                256                                         /**< UART RX buffer size. */
 
+#define TASK_TIMEOUT_INTERVAL           APP_TIMER_TICKS(1000)
 
 BLE_NUS_DEF(m_nus);                                                                 /**< BLE NUS service instance. */
 NRF_BLE_GATT_DEF(m_gatt);                                                           /**< GATT module instance. */
 BLE_ADVERTISING_DEF(m_advertising);                                                 /**< Advertising module instance. */
+APP_TIMER_DEF(m_task_timer_id);
 
 static uint16_t   m_conn_handle          = BLE_CONN_HANDLE_INVALID;                 /**< Handle of the current connection. */
 static uint16_t   m_ble_nus_max_data_len = BLE_GATT_ATT_MTU_DEFAULT - 3;            /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Nordic UART service module. */
@@ -831,7 +834,30 @@ static void log_init(void)
     NRF_LOG_DEFAULT_BACKENDS_INIT();
 }
 
+static void app_task_handler(void * p_context)
+{
+    printf("app_task_handler\r\n");
+    printf("%s\r\n", (char *)get_date_time());
+}
 
+/**@brief Function for initializing the timer module.
+  */
+static void timers_init(void)
+{
+    ret_code_t err_code = app_timer_init();
+    APP_ERROR_CHECK(err_code);
+
+    err_code = app_timer_create(&m_task_timer_id, APP_TIMER_MODE_REPEATED, app_task_handler);
+    APP_ERROR_CHECK(err_code);
+}
+
+static void application_timers_start(void)
+{
+     ret_code_t err_code;
+
+     err_code = app_timer_start(m_task_timer_id, TASK_TIMEOUT_INTERVAL, NULL);
+     APP_ERROR_CHECK(err_code);
+}
 /**@brief Function for placing the application in low power state while waiting for events.
  */
 static void power_manage(void)
@@ -1016,12 +1042,12 @@ int main(void)
     bool     erase_bonds;
 
     // Initialize.
-    err_code = app_timer_init();
-    APP_ERROR_CHECK(err_code);
+    timers_init();
 
     uart_init();
     log_init();
     wdt_init();
+    init_sys_time();
 
     buttons_leds_init(&erase_bonds);
     ble_stack_init();
@@ -1030,19 +1056,20 @@ int main(void)
     services_init();
     advertising_init();
     conn_params_init();
-    printf("\r\nApplication Start!\r\n");
     log_resetreason();
+    printf("\r\nApplication Start!\r\n");
     privacy_on();
     //set_local_mac_addr();
     get_local_mac_addr();
     NRF_LOG_INFO("Application Start!");
     //err_code = ble_advertising_start(&m_advertising, BLE_ADV_MODE_FAST);
     //APP_ERROR_CHECK(err_code);
+    application_timers_start();
     advertising_start();
-    scan_start();
-    nrf_delay_ms(1000);
-    err_code = app_uart_close();
-    APP_ERROR_CHECK(err_code);
+    //scan_start();
+    //nrf_delay_ms(1000);
+    //err_code = app_uart_close();
+    //APP_ERROR_CHECK(err_code);
 
     // Enter main loop.
     for (;;)
