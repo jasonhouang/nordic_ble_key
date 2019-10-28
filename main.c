@@ -20,6 +20,7 @@
 #include "nrf_drv_power.h"
 #include "sys_time.h"
 #include "seed_manage.h"
+#include "console.h"
 
 #if defined (UART_PRESENT)
 #include "nrf_uart.h"
@@ -544,6 +545,7 @@ void bsp_event_handler(bsp_event_t event)
 }
 
 
+#if 0
 /**@brief   Function for handling app_uart events.
  *
  * @details This function will receive a single character from the app_uart module and append it to
@@ -594,6 +596,7 @@ void uart_event_handle(app_uart_evt_t * p_event)
             break;
     }
 }
+#endif
 /**@snippet [Handling the data received over UART] */
 
 
@@ -837,8 +840,8 @@ static void log_init(void)
 
 static void app_task_handler(void * p_context)
 {
-    NRF_LOG_INFO("app_task_handler");
-    printf("%s\r\n", (char *)get_date_time());
+    //NRF_LOG_INFO("app_task_handler");
+    //printf("%s\r\n", (char *)get_date_time());
     check_is_need_update_majorminor();
 }
 
