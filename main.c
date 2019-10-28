@@ -19,6 +19,7 @@
 #include "nrf_drv_wdt.h"
 #include "nrf_drv_power.h"
 #include "sys_time.h"
+#include "seed_manage.h"
 
 #if defined (UART_PRESENT)
 #include "nrf_uart.h"
@@ -838,6 +839,7 @@ static void app_task_handler(void * p_context)
 {
     printf("app_task_handler\r\n");
     printf("%s\r\n", (char *)get_date_time());
+    check_is_need_update_majorminor();
 }
 
 /**@brief Function for initializing the timer module.
