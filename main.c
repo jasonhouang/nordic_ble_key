@@ -829,7 +829,7 @@ static void buttons_leds_init(bool * p_erase_bonds)
  */
 static void log_init(void)
 {
-    ret_code_t err_code = NRF_LOG_INIT(NULL);
+    ret_code_t err_code = NRF_LOG_INIT(get_beijing_time_ms);
     APP_ERROR_CHECK(err_code);
 
     NRF_LOG_DEFAULT_BACKENDS_INIT();
@@ -837,7 +837,7 @@ static void log_init(void)
 
 static void app_task_handler(void * p_context)
 {
-    printf("app_task_handler\r\n");
+    NRF_LOG_INFO("app_task_handler");
     printf("%s\r\n", (char *)get_date_time());
     check_is_need_update_majorminor();
 }
