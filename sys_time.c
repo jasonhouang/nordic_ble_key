@@ -131,7 +131,8 @@ uint32_t get_beijing_time_ms(void)
     uint32_t ret = 0;
     refresh_sys_time();
     //ret = (sys_tick.secondary_ticks%(24*60*60) + (8*60*60))*1000 + get_sys_timestamp_ms();
-    ret = ((sys_tick.secondary_ticks + 28800) % 86400) * 1000 + get_sys_timestamp_ms();
+    //ret = ((sys_tick.secondary_ticks + 28800) % 86400) * 1000 + get_sys_timestamp_ms();
+    ret = ((sys_tick.secondary_ticks) % 86400) * 1000 + get_sys_timestamp_ms();
     return ret;
 }
 /* since 1970 01.01 00:00:00 */

@@ -7,6 +7,7 @@
 #include "nrf_log.h"
 #include "console.h"
 #include "common.h"
+#include "sys_time.h"
 
 #define UART_RX_MAX_DATA_LEN                30
 #define PARAM_SIZE                          20
@@ -118,12 +119,11 @@ void console_process(void)
     uint16_t cmdCode;
     uint64_t i;
     uint64_t tmp_64;
-    //DATETIME time_tmp;
+    sysTime_t current;
     char* p;
     config_t* config = get_config();
 
     len = strlen((char*)cmd_buffer);
-    printf("len = %d\r\n", len);
     if (len >= 3)
     {
         if (cmd_buffer[0] == '$')
@@ -211,6 +211,38 @@ void console_process(void)
                             config->device_id[3],\
                             config->device_id[4],\
                             config->device_id[5]);
+                }
+                break;
+            case CMD_DA: //Write and Read Date
+                if(paramlen == 14)
+                {
+                    parameter[14] = 0;
+                    tmp_64 = strtoull((char*)parameter, &p, 10);
+
+                    current.year    = tmp_64/10000000000;
+                    current.month   = tmp_64%10000000000/100000000;
+                    current.day     = tmp_64%100000000/1000000;
+                    current.hour    = tmp_64%1000000/10000;
+                    current.min     = tmp_64%10000/100;
+                    current.sec     = tmp_64%100;
+
+                    uint32_t sum_sec = date_to_sec(current);
+                    if (sync_time_by_sec(sum_sec))
+                    {
+                        printf("OK\r\n");
+                    }
+                    else
+                    {
+                        printf("ERROR -2\r\n");
+                    }
+                }
+                else if(paramlen == 0)
+                {
+                    printf("%s\r\n", get_date_time());
+                }
+                else
+                {
+                    printf("ERROR -1\r\n");
                 }
                 break;
             default:
