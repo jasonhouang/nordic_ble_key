@@ -80,7 +80,7 @@
 #define DEAD_BEEF                       0xDEADBEEF                                  /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
 
 #define UART_TX_BUF_SIZE                512                                         /**< UART TX buffer size. */
-#define UART_RX_BUF_SIZE                256                                         /**< UART RX buffer size. */
+#define UART_RX_BUF_SIZE                128                                         /**< UART RX buffer size. */
 
 #define TASK_TIMEOUT_INTERVAL           APP_TIMER_TICKS(1000)
 

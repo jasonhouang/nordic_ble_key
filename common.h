@@ -34,6 +34,7 @@ typedef struct _config_t
 
 config_t * get_config(void);
 ret_code_t store_config(const config_t *config);
+bool parse_seed_data(const char* seed32Hexstr, uint8_t* out_sdata);
 
 #if 0
 #ifdef _GCC_WRAP_STDINT_H

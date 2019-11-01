@@ -3047,7 +3047,7 @@
 // <i> marker is injected informing about overflow.
 
 #ifndef NRF_LOG_ALLOW_OVERFLOW
-#define NRF_LOG_ALLOW_OVERFLOW 1
+#define NRF_LOG_ALLOW_OVERFLOW 0
 #endif
 
 // <q> NRF_LOG_USES_TIMESTAMP  - Enable timestamping

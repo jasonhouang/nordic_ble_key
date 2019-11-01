@@ -9,8 +9,8 @@
 #include "common.h"
 #include "sys_time.h"
 
-#define UART_RX_MAX_DATA_LEN                30
-#define PARAM_SIZE                          20
+#define UART_RX_MAX_DATA_LEN                128
+#define PARAM_SIZE                          UART_RX_MAX_DATA_LEN - 3
 
 #define CMD_NN  (((uint16_t)'N'<<8)|'N') //Null command
 #define CMD_DT  (((uint16_t)'D'<<8)|'T') //Go to DTM mode
@@ -27,7 +27,7 @@
 #define CMD_UL  (((uint16_t)'U'<<8)|'L') //Set UUID low battery
 
 static uint8_t cmd_buffer[UART_RX_MAX_DATA_LEN];
-static uint8_t index = 0;
+static int8_t  index = 0;
 static char    parameter[PARAM_SIZE+1];
 
 static void outputDeviceInfo(void)
@@ -169,7 +169,7 @@ void console_process(void)
                 //printf("VCC:%dmV\r\n", vcc_voltage);
                 break;
             case CMD_SN: //Write and Read DEVICE ID
-                if(paramlen == 12)
+                if (paramlen == 12)
                 {
                     parameter[12] = 0;//give string end
                     i = strtoull(parameter, &p, 16);
@@ -187,7 +187,7 @@ void console_process(void)
                         config->device_id[4] = i>>8;
                         config->device_id[5] = i>>0;
 
-                        if(NRF_SUCCESS == store_config(config))
+                        if (NRF_SUCCESS == store_config(config))
                         {
                             printf("OK\r\n");
                     //        flag_mac_base_update_request = true;
@@ -198,7 +198,7 @@ void console_process(void)
                         }
                     }
                 }
-                else if(paramlen != 0)
+                else if (paramlen != 0)
                 {
                     //Parameter length error.
                     printf("ERROR-1\r\n");
@@ -214,7 +214,7 @@ void console_process(void)
                 }
                 break;
             case CMD_DA: //Write and Read Date
-                if(paramlen == 14)
+                if (paramlen == 14)
                 {
                     parameter[14] = 0;
                     tmp_64 = strtoull((char*)parameter, &p, 10);
@@ -236,13 +236,53 @@ void console_process(void)
                         printf("ERROR -2\r\n");
                     }
                 }
-                else if(paramlen == 0)
+                else if (paramlen == 0)
                 {
                     printf("%s\r\n", get_date_time());
                 }
                 else
                 {
                     printf("ERROR -1\r\n");
+                }
+                break;
+            case CMD_ED://Write and Read Beacon Seed
+                NRF_LOG_INFO("len = %d", len);
+                if (paramlen == SEED_STR_LEN)
+                {
+                    char seed_str[SEED_STR_LEN+1];
+                    memcpy(seed_str, parameter, SEED_STR_LEN);
+                    seed_str[SEED_STR_LEN] = 0;
+                    if (parse_seed_data(seed_str, get_config()->seed_data))
+                    {
+                        if(NRF_SUCCESS == store_config(get_config()))
+                        {
+                            //flag_mac_base_update_request = true;
+                            //flag_beacon_mm_update_request = true;
+                            printf("OK\r\n");
+                        }
+                        else
+                        {
+                            printf("ERROR-5\r\n");
+                        }
+                    }
+                    else
+                    {
+                        printf("ERROR-6\r\n");
+                    }
+                }
+                else if (paramlen != 0)
+                {
+                    //Parameter length error.
+                    printf("ERROR-1\r\n");
+                }
+                else
+                {
+                    printf("SEED: ");
+                    for (i=0; i<SEED_LEN; i++)
+                    {
+                        printf("%02X", get_config()->seed_data[i]);
+                    }
+                    printf("\r\n");
                 }
                 break;
             default:
@@ -263,14 +303,19 @@ void uart_event_handle(app_uart_evt_t * p_event)
             UNUSED_VARIABLE(app_uart_get(&cmd_buffer[index]));
             index++;
 
+            if ((cmd_buffer[index - 1] == 0x08) && (index > 0))
+            {
+                index -= 2;
+            }
+
             if ((cmd_buffer[index - 1] == '\n') || (cmd_buffer[index - 1] == '\r') || (index >= UART_RX_MAX_DATA_LEN - 1))
             {
-                NRF_LOG_DEBUG("Ready to send data over BLE NUS");
-                NRF_LOG_HEXDUMP_INFO(cmd_buffer, index);
                 if (cmd_buffer[index - 1] != '\0')
                 {
                     cmd_buffer[index - 1] = '\0';
                 }
+
+                NRF_LOG_HEXDUMP_INFO(cmd_buffer, index - 1);
 
                 console_process();
                 index = 0;
