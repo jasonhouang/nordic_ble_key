@@ -26,6 +26,7 @@ typedef struct _config_t
     uint32_t check_sum;
     uint32_t len;
     uint32_t check_key;                          //Must equal to Magic key
+    uint32_t crc24;
     uint8_t device_id[DEVICE_ID_LEN];
     uint8_t seed_data[SEED_LEN];
     uint8_t uuid_normal[UUID_LEN];
@@ -35,6 +36,7 @@ typedef struct _config_t
 config_t * get_config(void);
 ret_code_t store_config(const config_t *config);
 bool parse_seed_data(const char* seed32Hexstr, uint8_t* out_sdata);
+void hex2str(const uint8_t* hex,uint16_t hex_len, uint8_t* str);
 
 #if 0
 #ifdef _GCC_WRAP_STDINT_H

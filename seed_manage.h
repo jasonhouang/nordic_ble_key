@@ -4,8 +4,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define SEED_LEN  64
-
 typedef struct _majorminor_t {
     uint16_t major;
     uint16_t minor;

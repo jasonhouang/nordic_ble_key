@@ -54,6 +54,7 @@ SRC_FILES += \
   $(PROJ_DIR)/sm3.c \
   $(PROJ_DIR)/console.c \
   $(PROJ_DIR)/common.c \
+  $(PROJ_DIR)/crc32_st.c \
   $(SDK_ROOT)/external/segger_rtt/SEGGER_RTT.c \
   $(SDK_ROOT)/external/segger_rtt/SEGGER_RTT_Syscalls_GCC.c \
   $(SDK_ROOT)/external/segger_rtt/SEGGER_RTT_printf.c \

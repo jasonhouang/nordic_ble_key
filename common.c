@@ -41,3 +41,27 @@ bool parse_seed_data(const char* seed32Hexstr, uint8_t* out_sdata)
 
     return true;
 }
+
+void hex2str(const uint8_t* hex,uint16_t hex_len, uint8_t* str)
+{
+    if(hex == NULL || str == NULL)
+        return;
+
+    uint8_t i = 0;
+    uint16_t str_len = (hex_len << 1);
+
+    for (i = 0; i < hex_len; i++){
+        str[i << 1] = (hex[i] & 0xF0) >> 4;
+        str[(i << 1) + 1] = hex[i] & 0x0F;
+    }
+
+    for (i = 0; i < str_len; i++)
+    {
+        if (str[i] < 0x0A){
+            str[i] = str[i] + 0x30; // '0'
+        } else {
+            str[i] = (str[i] - 0x0A) + 0x41; // 'A'
+        }
+    }
+}
+

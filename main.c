@@ -14,6 +14,7 @@
 #include "ble_nus.h"
 #include "app_uart.h"
 #include "app_util_platform.h"
+#include "app_scheduler.h"
 #include "bsp_btn_ble.h"
 #include "nrf_delay.h"
 #include "nrf_drv_wdt.h"
@@ -21,6 +22,9 @@
 #include "sys_time.h"
 #include "seed_manage.h"
 #include "console.h"
+#include "common.h"
+#include "sm3.h"
+#include "crc32.h"
 
 #if defined (UART_PRESENT)
 #include "nrf_uart.h"
@@ -37,7 +41,7 @@
 
 #define APP_FEATURE_NOT_SUPPORTED       BLE_GATT_STATUS_ATTERR_APP_BEGIN + 2        /**< Reply when unsupported features are requested. */
 
-#define NON_CONNECTABLE_ADV_INTERVAL    MSEC_TO_UNITS(100, UNIT_0_625_MS) /**< The advertising interval for non-connectable advertisement (100 ms). This value can vary between 100ms to 10.24s). */
+#define NON_CONNECTABLE_ADV_INTERVAL    3200//MSEC_TO_UNITS(100, UNIT_0_625_MS) /**< The advertising interval for non-connectable advertisement (100 ms). This value can vary between 100ms to 10.24s). */
 
 #define APP_BEACON_INFO_LENGTH          0x17                              /**< Total length of information advertised by the Beacon. */
 #define APP_ADV_DATA_LENGTH             0x15                              /**< Length of manufacturer specific data in the advertisement. */
@@ -65,9 +69,9 @@
 #define APP_ADV_INTERVAL                64                                          /**< The advertising interval (in units of 0.625 ms. This value corresponds to 40 ms). */
 #define APP_ADV_TIMEOUT_IN_SECONDS      0                                         /**< The advertising timeout (in units of seconds). */
 
-#define SCAN_INTERVAL           0x00A0                                  /**< Determines scan interval in units of 0.625 millisecond. */
-#define SCAN_WINDOW             0x0050                                  /**< Determines scan window in units of 0.625 millisecond. */
-#define SCAN_TIMEOUT            0x0000                                  /**< Timout when scanning. 0x0000 disables timeout. */
+#define SCAN_INTERVAL           150                                  /**< Determines scan interval in units of 0.625 millisecond. */
+#define SCAN_WINDOW             150                                  /**< Determines scan window in units of 0.625 millisecond. */
+#define SCAN_TIMEOUT            500                                  /**< Timout when scanning. 0x0000 disables timeout. */
 
 #define MIN_CONN_INTERVAL               MSEC_TO_UNITS(20, UNIT_1_25_MS)             /**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
 #define MAX_CONN_INTERVAL               MSEC_TO_UNITS(75, UNIT_1_25_MS)             /**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
@@ -84,10 +88,23 @@
 
 #define TASK_TIMEOUT_INTERVAL           APP_TIMER_TICKS(1000)
 
+#define APP_SCHED_MAX_EVENT_SIZE 1                  /**< Maximum size of scheduler events. */ 
+#define APP_SCHED_QUEUE_SIZE     4                  /**< Maximum number of events in the scheduler queue. */
+
+enum {
+    OPEN_LOCK = 0,
+    CLOSE_LOCK,
+};
+
+typedef struct {
+    uint8_t cmd;
+} ctl_cmd_t;
+
 BLE_NUS_DEF(m_nus);                                                                 /**< BLE NUS service instance. */
 NRF_BLE_GATT_DEF(m_gatt);                                                           /**< GATT module instance. */
 BLE_ADVERTISING_DEF(m_advertising);                                                 /**< Advertising module instance. */
 APP_TIMER_DEF(m_task_timer_id);
+APP_TIMER_DEF(m_timer_scanner);
 
 static uint16_t   m_conn_handle          = BLE_CONN_HANDLE_INVALID;                 /**< Handle of the current connection. */
 static uint16_t   m_ble_nus_max_data_len = BLE_GATT_ATT_MTU_DEFAULT - 3;            /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Nordic UART service module. */
@@ -97,6 +114,22 @@ static ble_uuid_t m_adv_uuids[]          =                                      
 };
 
 static ble_gap_adv_params_t m_adv_params;                                 /**< Parameters to be passed to the stack when starting advertising. */
+
+volatile bool m_scanner_started = false;
+
+#define TARGET_VENDOR_DATA_LEN              16
+#define TARGET_PRODUCT_FILTER_DATA_LEN      6
+#define TARGET_PRODUCT_FILTER_DATA          0x08, 0x00, 0x20, 0x0C, 0x9A, 0x66
+const static uint8_t manufactuer_data[TARGET_VENDOR_DATA_LEN] = 
+{
+    0x11, 0xE8, 0xB5, 0x00,
+    TARGET_PRODUCT_FILTER_DATA,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
+static uint8_t key_crc24[7];
+static uint8_t mac_set[] = {0x00, 0x01, 0xbe, 0xb9, 0x47, 0x81};
+static ctl_cmd_t ctl_cmd = { .cmd = OPEN_LOCK };
 
 static uint8_t m_beacon_info[APP_BEACON_INFO_LENGTH] =                    /**< Information advertised by the Beacon. */
 {
@@ -111,7 +144,10 @@ static uint8_t m_beacon_info[APP_BEACON_INFO_LENGTH] =                    /**< I
         // this implementation.
 };
 
+static void local_mac_addr_set(const uint8_t * mac);
 static void get_local_mac_addr(void);
+static void scan_start(void);
+static void scan_stop(void);
 
 /**@brief Function for starting advertising.
  */
@@ -122,8 +158,8 @@ static void advertising_start(void)
     err_code = sd_ble_gap_adv_start(&m_adv_params, APP_BLE_CONN_CFG_TAG);
     APP_ERROR_CHECK(err_code);
 
-    err_code = bsp_indication_set(BSP_INDICATE_ADVERTISING);
-    APP_ERROR_CHECK(err_code);
+    //err_code = bsp_indication_set(BSP_INDICATE_ADVERTISING);
+    //APP_ERROR_CHECK(err_code);
 }
 
 /**@brief Function for assert macro callback.
@@ -331,6 +367,66 @@ static void on_adv_evt(ble_adv_evt_t ble_adv_evt)
 }
 
 
+static void parse_adv_report(ble_gap_evt_adv_report_t const * p_adv_report)
+{
+    ret_code_t   err_code;
+    uint16_t     index  = 0;
+    uint8_t    * p_data = (uint8_t *)p_adv_report->data;
+    bool         is_target_product = false;
+    bool         is_target_name = false;
+    uint8_t    * p_ebox_state = NULL;
+    uint8_t      device_name[10];
+
+    while (index < p_adv_report->dlen)
+    {
+        uint8_t field_length = p_data[index];
+        uint8_t field_type   = p_data[index + 1];
+        
+        if (   (field_type == BLE_GAP_AD_TYPE_SHORT_LOCAL_NAME)
+            || (field_type == BLE_GAP_AD_TYPE_COMPLETE_LOCAL_NAME ))
+        {
+            if ((field_length == 8) && (p_data[index + 2] == 'e'))
+            {
+                memcpy(device_name, &p_data[index + 2], field_length); 
+                device_name[field_length - 1] = '\0';
+                //printf("scanned:%s, rssi = %d\r\n", device_name, p_adv_report->rssi);
+
+                if (!memcmp(key_crc24, &p_data[index + 3], 6))
+                {
+                    is_target_name = true;
+                }
+            }
+        }
+        if (   (field_type == BLE_GAP_AD_TYPE_MANUFACTURER_SPECIFIC_DATA)
+            && (field_length == TARGET_VENDOR_DATA_LEN + 1))
+        {
+            if (!memcmp(&p_data[index + 6], &manufactuer_data[4], TARGET_PRODUCT_FILTER_DATA_LEN))
+            {
+                is_target_product = true;
+                p_ebox_state = &p_data[index + 4];
+            }
+        }
+        index += field_length + 1;
+    }
+
+    if (is_target_product && is_target_name)
+    {
+        if (p_ebox_state)
+        {
+            printf("scanned:%s, rssi = %d\r\n", device_name, p_adv_report->rssi);
+            printf("0x%02x,0x%02x\r\n", p_ebox_state[0], p_ebox_state[1]);
+            if (p_ebox_state[1] == 0x68 && ctl_cmd.cmd == OPEN_LOCK)
+            {
+                scan_stop();
+            }
+            else if (p_ebox_state[1] == 0x69 && ctl_cmd.cmd == CLOSE_LOCK)
+            {
+                scan_stop();
+            }
+        }
+    }
+}
+
 /**@brief Function for handling BLE events.
  *
  * @param[in]   p_ble_evt   Bluetooth stack event.
@@ -438,7 +534,12 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context)
                 }
             }
         } break; // BLE_GATTS_EVT_RW_AUTHORIZE_REQUEST
+        case BLE_GAP_EVT_ADV_REPORT:
+        {
+            ble_gap_evt_adv_report_t const * adv_report = &(p_ble_evt->evt.gap_evt.params.adv_report);
 
+            parse_adv_report(adv_report);
+        } break;
         default:
             // No implementation needed.
             break;
@@ -692,6 +793,83 @@ static void advertising_init(void)
 #endif
 
 #if 1
+
+const static uint8_t pcb_id[] = {0xA7, 0x2D, 0xFF, 0x8C, 0x96, 0x72};
+const static uint8_t key_seed[] = "13989DDD23516A7147DFF970F020684F0A5ECFC44D261123E1E64EC706578E7E";
+
+
+static void key_init(void)
+{
+    memcpy(get_config()->device_id, pcb_id, 6);
+    if (!parse_seed_data((const char *)key_seed, get_config()->seed_data))
+    {
+        printf("parse_seed_data error\r\n");
+    }
+
+    uint32_t pcb_id_crc = crc32_compute((uint8_t*)get_config()->device_id, 6, NULL);
+    uint32_t key_crc = crc32_compute((uint8_t*)get_config()->seed_data, 32, &pcb_id_crc);
+    get_config()->crc24 = key_crc & 0x00FFFFFF;
+    printf("crc24 = 0x%lx\r\n", get_config()->crc24);
+    uint8_t crc24[3];
+    crc24[0] = (uint8_t) ((get_config()->crc24 & 0x00FF0000) >> 16);
+    crc24[1] = (uint8_t) ((get_config()->crc24 & 0x0000FF00) >> 8);
+    crc24[2] = (uint8_t) ((get_config()->crc24 & 0x000000FF) >> 0);
+    hex2str((const uint8_t *)crc24, 3, key_crc24);
+    key_crc24[6] = '\0';
+    printf("key_crc24 = %s\r\n", key_crc24);
+}
+
+static uint8_t sum_check_gen(uint8_t mac4)
+{
+    uint8_t input[33];
+    uint8_t output[4];
+    uint8_t check = 0;
+
+    input[0] = mac4;
+
+    memcpy(&input[1], get_config()->seed_data, 32);
+
+    sm3(input, 33, output);
+
+    for (int i = 0; i < 4; i++)
+    {
+        check += output[i];
+    }
+
+    return check;
+}
+
+static void scheduler_scan_trigger(void * p_event_data, uint16_t event_size)
+{
+    //get_local_mac_addr();
+    ctl_cmd = *(ctl_cmd_t *)p_event_data;
+    printf("scheduler_scan_trigger = %d\r\n", ctl_cmd.cmd);
+    if (m_scanner_started)
+        return;
+
+//    ret_code_t err_code = sd_ble_gap_adv_stop();
+//    APP_ERROR_CHECK(err_code);
+
+    mac_set[2] = (uint8_t)(get_config()->crc24);
+    mac_set[3] = (uint8_t)(get_config()->crc24 >> 8);
+    mac_set[4] = (uint8_t)(get_config()->crc24 >> 16);
+
+    if (ctl_cmd.cmd == OPEN_LOCK)
+    {
+        mac_set[1] = 0x01;
+        mac_set[0] = sum_check_gen(mac_set[1]);
+        local_mac_addr_set(mac_set);
+        get_local_mac_addr();
+    }
+    else
+    {
+        mac_set[1] = 0x00;
+        mac_set[0] = sum_check_gen(mac_set[1]);
+        local_mac_addr_set(mac_set);
+        get_local_mac_addr();
+    }
+    scan_start();
+}
 /**@brief Function for handling button events from app_button IRQ
  *
  * @param[in] pin_no        Pin of the button for which an event has occured
@@ -699,6 +877,7 @@ static void advertising_init(void)
  */
 static void button_evt_handler(uint8_t pin_no, uint8_t button_action)
 {
+    ret_code_t err_code;
     static bool flag_state_lock = false;
 
     if (pin_no == BUTTON_OPEN_PIN)
@@ -706,7 +885,12 @@ static void button_evt_handler(uint8_t pin_no, uint8_t button_action)
         if (button_action == APP_BUTTON_PUSH)
         {
             printf("open key push\r\n");
-            get_local_mac_addr();
+            err_code = bsp_indication_set(BSP_INDICATE_SENT_OK);
+            APP_ERROR_CHECK(err_code);
+
+            ctl_cmd_t ctl_cmd = { .cmd = OPEN_LOCK };
+            err_code = app_sched_event_put(&ctl_cmd, sizeof(ctl_cmd_t), scheduler_scan_trigger);
+            APP_ERROR_CHECK(err_code);
         }
         else
         {
@@ -738,8 +922,13 @@ static void button_evt_handler(uint8_t pin_no, uint8_t button_action)
     {
         if (button_action == APP_BUTTON_PUSH)
         {
-            uart_init();
+            //uart_init();
+            err_code = bsp_indication_set(BSP_INDICATE_SENT_OK);
+            APP_ERROR_CHECK(err_code);
             printf("close key push\r\n");
+            ctl_cmd_t ctl_cmd = { .cmd = CLOSE_LOCK };
+            err_code = app_sched_event_put(&ctl_cmd, sizeof(ctl_cmd_t), scheduler_scan_trigger);
+            APP_ERROR_CHECK(err_code);
         }
         else
         {
@@ -845,6 +1034,14 @@ static void app_task_handler(void * p_context)
     check_is_need_update_majorminor();
 }
 
+static void app_timer_scanner(void * p_context)
+{
+    ret_code_t err_code;
+    printf("app_timer_scanner stopped\r\n");
+
+    scan_stop();
+}
+
 /**@brief Function for initializing the timer module.
   */
 static void timers_init(void)
@@ -853,6 +1050,9 @@ static void timers_init(void)
     APP_ERROR_CHECK(err_code);
 
     err_code = app_timer_create(&m_task_timer_id, APP_TIMER_MODE_REPEATED, app_task_handler);
+    APP_ERROR_CHECK(err_code);
+
+    err_code = app_timer_create(&m_timer_scanner, APP_TIMER_MODE_SINGLE_SHOT, app_timer_scanner);
     APP_ERROR_CHECK(err_code);
 }
 
@@ -923,16 +1123,21 @@ static void privacy_on(void)
     }
 }
 
-static void set_local_mac_addr(void)
+static void local_mac_addr_set(const uint8_t * mac)
 {
     ret_code_t ret;
 
-    ble_gap_addr_t own_addr = {
+    ble_gap_addr_t ble_gap_addr = {
         .addr_type = BLE_GAP_ADDR_TYPE_PUBLIC,
-        .addr = {0xe6, 0x59, 0xc5, 0xb2, 0xf2, 0x64}
+        .addr = {0x00, 0x00, 0xbe, 0xb9, 0x47, 0x81}
     };
 
-    ret = sd_ble_gap_addr_set(&own_addr);
+    if (mac)
+    {
+        memcpy(ble_gap_addr.addr, mac, BLE_GAP_ADDR_LEN);
+    }
+
+    ret = sd_ble_gap_addr_set(&ble_gap_addr);
     APP_ERROR_CHECK(ret);
 }
 
@@ -960,13 +1165,44 @@ static ble_gap_scan_params_t const m_scan_params =
 /**@brief Function to start scanning. */
 static void scan_start(void)
 {
-    ret_code_t ret;
+    ret_code_t err_code;
 
-    ret = sd_ble_gap_scan_start(&m_scan_params);
-    APP_ERROR_CHECK(ret);
+    if (m_scanner_started)
+    {
+        printf("already scanning\r\n");
+        return;
+    }
 
-//    ret = bsp_indication_set(BSP_INDICATE_SCANNING);
-//    APP_ERROR_CHECK(ret);
+    printf("start scan...\r\n");
+
+    err_code = sd_ble_gap_tx_power_set(4);
+    APP_ERROR_CHECK(err_code);
+    
+    m_scanner_started  = true;
+
+    err_code = sd_ble_gap_scan_start(&m_scan_params);
+    APP_ERROR_CHECK(err_code);
+
+    err_code = app_timer_start(m_timer_scanner, APP_TIMER_TICKS(5000), NULL);
+    APP_ERROR_CHECK(err_code);
+}
+
+static void scan_stop(void)
+{
+    ret_code_t err_code;
+
+    if (m_scanner_started)
+    {
+        err_code = app_timer_stop(m_timer_scanner);
+        APP_ERROR_CHECK(err_code);
+
+        err_code = sd_ble_gap_scan_stop();
+        APP_ERROR_CHECK(err_code);
+
+        m_scanner_started  = false;
+
+        printf("scan stopped\r\n");
+    }
 }
 
 static void wdt_event_handler(void)
@@ -1055,6 +1291,7 @@ int main(void)
     init_sys_time();
 
     buttons_leds_init(&erase_bonds);
+    APP_SCHED_INIT(APP_SCHED_MAX_EVENT_SIZE, APP_SCHED_QUEUE_SIZE);
     ble_stack_init();
     gap_params_init();
     gatt_init();
@@ -1063,15 +1300,15 @@ int main(void)
     conn_params_init();
     log_resetreason();
     printf("\r\nApplication Start!\r\n");
-    privacy_on();
-    //set_local_mac_addr();
+    key_init();
+    //privacy_on();
+    local_mac_addr_set(mac_set);
     get_local_mac_addr();
     NRF_LOG_INFO("Application Start!");
     //err_code = ble_advertising_start(&m_advertising, BLE_ADV_MODE_FAST);
     //APP_ERROR_CHECK(err_code);
     application_timers_start();
-    advertising_start();
-    //scan_start();
+    //advertising_start();
     //nrf_delay_ms(1000);
     //err_code = app_uart_close();
     //APP_ERROR_CHECK(err_code);
@@ -1081,6 +1318,7 @@ int main(void)
     {
         wdt_feed();
         UNUSED_RETURN_VALUE(NRF_LOG_PROCESS());
+        app_sched_execute();
         power_manage();
     }
 }
