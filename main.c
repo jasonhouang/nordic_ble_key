@@ -69,9 +69,9 @@
 #define APP_ADV_INTERVAL                64                                          /**< The advertising interval (in units of 0.625 ms. This value corresponds to 40 ms). */
 #define APP_ADV_TIMEOUT_IN_SECONDS      0                                         /**< The advertising timeout (in units of seconds). */
 
-#define SCAN_INTERVAL           150                                  /**< Determines scan interval in units of 0.625 millisecond. */
-#define SCAN_WINDOW             150                                  /**< Determines scan window in units of 0.625 millisecond. */
-#define SCAN_TIMEOUT            500                                  /**< Timout when scanning. 0x0000 disables timeout. */
+#define SCAN_INTERVAL           8000                                  /**< Determines scan interval in units of 0.625 millisecond. */
+#define SCAN_WINDOW             8000                                  /**< Determines scan window in units of 0.625 millisecond. */
+#define SCAN_TIMEOUT               5                                  /**< Timout when scanning. 0x0000 disables timeout. */
 
 #define MIN_CONN_INTERVAL               MSEC_TO_UNITS(20, UNIT_1_25_MS)             /**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
 #define MAX_CONN_INTERVAL               MSEC_TO_UNITS(75, UNIT_1_25_MS)             /**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
@@ -90,6 +90,8 @@
 
 #define APP_SCHED_MAX_EVENT_SIZE 1                  /**< Maximum size of scheduler events. */ 
 #define APP_SCHED_QUEUE_SIZE     4                  /**< Maximum number of events in the scheduler queue. */
+
+//#define printf(...)
 
 enum {
     OPEN_LOCK = 0,
@@ -116,6 +118,7 @@ static ble_uuid_t m_adv_uuids[]          =                                      
 static ble_gap_adv_params_t m_adv_params;                                 /**< Parameters to be passed to the stack when starting advertising. */
 
 volatile bool m_scanner_started = false;
+volatile bool m_adv_started = false;
 
 #define TARGET_VENDOR_DATA_LEN              16
 #define TARGET_PRODUCT_FILTER_DATA_LEN      6
@@ -149,17 +152,31 @@ static void get_local_mac_addr(void);
 static void scan_start(void);
 static void scan_stop(void);
 
+static void advertising_stop(void)
+{
+    ret_code_t err_code;
+
+    if (m_adv_started)
+    {
+        ret_code_t err_code = sd_ble_gap_adv_stop();
+        APP_ERROR_CHECK(err_code);
+
+        m_adv_started = false;
+    }
+}
 /**@brief Function for starting advertising.
  */
 static void advertising_start(void)
 {
     ret_code_t err_code;
 
-    err_code = sd_ble_gap_adv_start(&m_adv_params, APP_BLE_CONN_CFG_TAG);
-    APP_ERROR_CHECK(err_code);
+    if (!m_adv_started)
+    {
+        m_adv_started = true;
 
-    //err_code = bsp_indication_set(BSP_INDICATE_ADVERTISING);
-    //APP_ERROR_CHECK(err_code);
+        err_code = sd_ble_gap_adv_start(&m_adv_params, APP_BLE_CONN_CFG_TAG);
+        APP_ERROR_CHECK(err_code);
+    }
 }
 
 /**@brief Function for assert macro callback.
@@ -389,7 +406,6 @@ static void parse_adv_report(ble_gap_evt_adv_report_t const * p_adv_report)
             {
                 memcpy(device_name, &p_data[index + 2], field_length); 
                 device_name[field_length - 1] = '\0';
-                //printf("scanned:%s, rssi = %d\r\n", device_name, p_adv_report->rssi);
 
                 if (!memcmp(key_crc24, &p_data[index + 3], 6))
                 {
@@ -414,7 +430,7 @@ static void parse_adv_report(ble_gap_evt_adv_report_t const * p_adv_report)
         if (p_ebox_state)
         {
             printf("scanned:%s, rssi = %d\r\n", device_name, p_adv_report->rssi);
-            printf("0x%02x,0x%02x\r\n", p_ebox_state[0], p_ebox_state[1]);
+            //printf("0x%02x,0x%02x\r\n", p_ebox_state[0], p_ebox_state[1]);
             if (p_ebox_state[1] == 0x68 && ctl_cmd.cmd == OPEN_LOCK)
             {
                 scan_stop();
@@ -841,14 +857,13 @@ static uint8_t sum_check_gen(uint8_t mac4)
 
 static void scheduler_scan_trigger(void * p_event_data, uint16_t event_size)
 {
-    //get_local_mac_addr();
-    ctl_cmd = *(ctl_cmd_t *)p_event_data;
-    printf("scheduler_scan_trigger = %d\r\n", ctl_cmd.cmd);
     if (m_scanner_started)
         return;
 
-//    ret_code_t err_code = sd_ble_gap_adv_stop();
-//    APP_ERROR_CHECK(err_code);
+    //get_local_mac_addr();
+    ctl_cmd = *(ctl_cmd_t *)p_event_data;
+
+    advertising_stop();
 
     mac_set[2] = (uint8_t)(get_config()->crc24);
     mac_set[3] = (uint8_t)(get_config()->crc24 >> 8);
@@ -868,6 +883,7 @@ static void scheduler_scan_trigger(void * p_event_data, uint16_t event_size)
         local_mac_addr_set(mac_set);
         get_local_mac_addr();
     }
+
     scan_start();
 }
 /**@brief Function for handling button events from app_button IRQ
@@ -1202,6 +1218,8 @@ static void scan_stop(void)
         m_scanner_started  = false;
 
         printf("scan stopped\r\n");
+
+        advertising_start();
     }
 }
 
@@ -1275,6 +1293,20 @@ static void log_resetreason(void)
     nrf_power_resetreas_clear(nrf_power_resetreas_get());
 }
 
+static void enable_dcdc_mode(void)
+{
+    uint32_t err_code = sd_power_dcdc_mode_set(NRF_POWER_DCDC_ENABLE);
+
+    if (err_code != NRF_SUCCESS)
+    {
+        NRF_LOG_INFO("Function: %s, error code: %s", (uint32_t)__func__, 
+                (uint32_t)NRF_LOG_ERROR_STRING_GET(err_code));
+    }
+
+    APP_ERROR_CHECK(err_code);
+}
+
+
 /**@brief Application main function.
  */
 int main(void)
@@ -1285,7 +1317,7 @@ int main(void)
     // Initialize.
     timers_init();
 
-    uart_init();
+    //uart_init();
     log_init();
     wdt_init();
     init_sys_time();
@@ -1299,8 +1331,10 @@ int main(void)
     advertising_init();
     conn_params_init();
     log_resetreason();
+
     printf("\r\nApplication Start!\r\n");
     key_init();
+    enable_dcdc_mode();
     //privacy_on();
     local_mac_addr_set(mac_set);
     get_local_mac_addr();
@@ -1308,7 +1342,7 @@ int main(void)
     //err_code = ble_advertising_start(&m_advertising, BLE_ADV_MODE_FAST);
     //APP_ERROR_CHECK(err_code);
     application_timers_start();
-    //advertising_start();
+    advertising_start();
     //nrf_delay_ms(1000);
     //err_code = app_uart_close();
     //APP_ERROR_CHECK(err_code);
