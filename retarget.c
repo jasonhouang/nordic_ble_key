@@ -54,6 +54,7 @@
 #include <stdint.h>
 #include "app_uart.h"
 #include "nrf_error.h"
+#include "common.h"
 
 
 #if defined(__CC_ARM)
@@ -114,12 +115,13 @@ int _write(int file, const char * p_char, int len)
 
     UNUSED_PARAMETER(file);
 
-#if USER_DEBUG
+    if (get_key_state()->is_low_power)
+        return 0;
+
     for (i = 0; i < len; i++)
     {
         UNUSED_VARIABLE(app_uart_put(*p_char++));
     }
-#endif
 
     return len;
 }
@@ -127,12 +129,15 @@ int _write(int file, const char * p_char, int len)
 int _read(int file, char * p_char, int len)
 {
     UNUSED_PARAMETER(file);
-#if USER_DEBUG
+
+    if (get_key_state()->is_low_power)
+        return 0;
+
     while (app_uart_get((uint8_t *)p_char) == NRF_ERROR_NOT_FOUND)
     {
         // No implementation needed.
     }
-#endif
+
     return 1;
 }
 #elif defined(__ICCARM__)

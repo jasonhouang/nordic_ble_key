@@ -92,6 +92,7 @@
 #define APP_SCHED_QUEUE_SIZE     4                  /**< Maximum number of events in the scheduler queue. */
 
 //#define printf(...)
+#define CONSOLE_TIMEOUT                 30
 
 enum {
     OPEN_LOCK = 0,
@@ -119,6 +120,7 @@ static ble_gap_adv_params_t m_adv_params;                                 /**< P
 
 volatile bool m_scanner_started = false;
 volatile bool m_adv_started = false;
+static uint16_t m_console_timeout = CONSOLE_TIMEOUT;
 
 #define TARGET_VENDOR_DATA_LEN              16
 #define TARGET_PRODUCT_FILTER_DATA_LEN      6
@@ -810,12 +812,16 @@ static void advertising_init(void)
 
 #if 1
 
-const static uint8_t pcb_id[] = {0xA7, 0x2D, 0xFF, 0x8C, 0x96, 0x72};
-const static uint8_t key_seed[] = "13989DDD23516A7147DFF970F020684F0A5ECFC44D261123E1E64EC706578E7E";
+//const static uint8_t pcb_id[] = {0xA7, 0x2D, 0xFF, 0x8C, 0x96, 0x72};
+//const static uint8_t key_seed[] = "13989DDD23516A7147DFF970F020684F0A5ECFC44D261123E1E64EC706578E7E";
+const static uint8_t pcb_id[] = {0x5a, 0xcf, 0x30, 0x2c, 0x34, 0x0d};
+const static uint8_t key_seed[] = "4C736A750EAFA28F6530532CB3561A4C56B2FE1B26397E1C668A25276FE8EB5A";
 
 
 static void key_init(void)
 {
+    key_state_init();
+
     memcpy(get_config()->device_id, pcb_id, 6);
     if (!parse_seed_data((const char *)key_seed, get_config()->seed_data))
     {
@@ -1048,6 +1054,19 @@ static void app_task_handler(void * p_context)
     //NRF_LOG_INFO("app_task_handler");
     //printf("%s\r\n", (char *)get_date_time());
     check_is_need_update_majorminor();
+    if (m_console_timeout)
+    {
+        m_console_timeout --;
+        if (!m_console_timeout)
+        {
+            printf("ZZzz...\r\n");
+            uint32_t err_code = sd_app_evt_wait();
+            APP_ERROR_CHECK(err_code);
+            err_code = app_uart_close();
+            APP_ERROR_CHECK(err_code);
+            set_key_state_low_power();
+        }
+    }
 }
 
 static void app_timer_scanner(void * p_context)
@@ -1213,7 +1232,7 @@ static void scan_stop(void)
         APP_ERROR_CHECK(err_code);
 
         err_code = sd_ble_gap_scan_stop();
-        APP_ERROR_CHECK(err_code);
+        //APP_ERROR_CHECK(err_code);
 
         m_scanner_started  = false;
 
@@ -1317,7 +1336,7 @@ int main(void)
     // Initialize.
     timers_init();
 
-    //uart_init();
+    uart_init();
     log_init();
     wdt_init();
     init_sys_time();
@@ -1332,7 +1351,7 @@ int main(void)
     conn_params_init();
     log_resetreason();
 
-    printf("\r\nApplication Start!\r\n");
+    printf("\r\n[PHYSICAL KEY] Ver:%d.%d, Re:%s\r\n", VERSION, REVISON, __DATE__);
     key_init();
     enable_dcdc_mode();
     //privacy_on();
@@ -1344,8 +1363,6 @@ int main(void)
     application_timers_start();
     advertising_start();
     //nrf_delay_ms(1000);
-    //err_code = app_uart_close();
-    //APP_ERROR_CHECK(err_code);
 
     // Enter main loop.
     for (;;)

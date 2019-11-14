@@ -197,6 +197,8 @@ OPT = -Os -g3
 # Uncomment the line below to enable link time optimization
 #OPT += -flto
 
+OPT += -DDEBUG
+
 # C flags common to all targets
 CFLAGS += $(OPT)
 # CFLAGS += -DBOARD_PCA10040

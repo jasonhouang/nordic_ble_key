@@ -4,8 +4,23 @@
 #include "nrf_error.h"
 #include "common.h"
 
-
+static key_state_t key_state;
 static config_t config;
+
+void key_state_init(void)
+{
+    key_state.is_low_power = false;
+}
+
+const key_state_t* get_key_state(void)
+{
+    return (const key_state_t *)&key_state;
+}
+
+void set_key_state_low_power(void)
+{
+    key_state.is_low_power = true;
+}
 
 config_t * get_config(void)
 {

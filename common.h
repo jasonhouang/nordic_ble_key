@@ -21,6 +21,11 @@
 #define LOW_BATTERY                                         2500
 #define MY_LOCKER_NAME_SIZE                                 7
 
+typedef struct _key_state_t
+{
+    bool is_low_power;
+} key_state_t;
+
 typedef struct _config_t
 {
     uint32_t check_sum;
@@ -33,7 +38,11 @@ typedef struct _config_t
     uint8_t uuid_low_battery[UUID_LEN];
 } config_t;
 
-config_t * get_config(void);
+void key_state_init(void);
+const key_state_t* get_key_state(void);
+void set_key_state_low_power(void);
+
+config_t* get_config(void);
 ret_code_t store_config(const config_t *config);
 bool parse_seed_data(const char* seed32Hexstr, uint8_t* out_sdata);
 void hex2str(const uint8_t* hex,uint16_t hex_len, uint8_t* str);
