@@ -55,8 +55,8 @@ SRC_FILES += \
   $(PROJ_DIR)/common.c \
   $(PROJ_DIR)/crc32_st.c \
   $(PROJ_DIR)/dtm.c \
-  $(SDK_ROOT)/components/ble/ble_dtm/ble_dtm.c \
-  $(SDK_ROOT)/components/ble/ble_dtm/ble_dtm_hw_nrf52.c \
+  $(PROJ_DIR)/ble_dtm/ble_dtm.c \
+  $(PROJ_DIR)/ble_dtm/ble_dtm_hw_nrf52.c \
   $(SDK_ROOT)/external/segger_rtt/SEGGER_RTT.c \
   $(SDK_ROOT)/external/segger_rtt/SEGGER_RTT_Syscalls_GCC.c \
   $(SDK_ROOT)/external/segger_rtt/SEGGER_RTT_printf.c \
@@ -74,6 +74,8 @@ SRC_FILES += \
   $(SDK_ROOT)/components/softdevice/common/nrf_sdh_soc.c \
   $(PROJ_DIR)/retarget.c \
   #$(SDK_ROOT)/components/libraries/uart/retarget.c \
+  #$(SDK_ROOT)/components/ble/ble_dtm/ble_dtm.c \
+  #$(SDK_ROOT)/components/ble/ble_dtm/ble_dtm_hw_nrf52.c \
 
 # Include folders common to all targets
 INC_FOLDERS += \
@@ -104,7 +106,6 @@ INC_FOLDERS += \
   $(SDK_ROOT)/components/ble/ble_services/ble_hrs_c \
   $(SDK_ROOT)/components/libraries/queue \
   $(SDK_ROOT)/components/libraries/pwr_mgmt \
-  $(SDK_ROOT)/components/ble/ble_dtm \
   $(SDK_ROOT)/components/toolchain/cmsis/include \
   $(SDK_ROOT)/components/ble/ble_services/ble_rscs_c \
   $(SDK_ROOT)/components/drivers_nrf/uart \
@@ -143,6 +144,7 @@ INC_FOLDERS += \
   $(SDK_ROOT)/components/drivers_nrf/pwm \
   ../config \
   $(PROJ_DIR)/ \
+  $(PROJ_DIR)/ble_dtm \
   $(SDK_ROOT)/components/libraries/csense_drv \
   $(SDK_ROOT)/components/libraries/csense \
   $(SDK_ROOT)/components/libraries/balloc \
@@ -191,6 +193,7 @@ INC_FOLDERS += \
   $(SDK_ROOT)/components/ble/ble_services/ble_rscs \
   $(SDK_ROOT)/components/drivers_nrf/usbd \
   $(SDK_ROOT)/components/ble/ble_services/ble_hrs \
+  #$(SDK_ROOT)/components/ble/ble_dtm \
 
 # Libraries common to all targets
 LIB_FILES += \

@@ -1373,6 +1373,8 @@ int main(void)
         power_manage();
         if (get_key_state()->is_dtm_mode)
         {
+            err_code = app_timer_stop(m_task_timer_id);
+            APP_ERROR_CHECK(err_code);
             break;
         }
     }

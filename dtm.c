@@ -40,6 +40,7 @@ int dtm_main(void)
     dtm_event_t result;                    // Result of a DTM operation.
 
     printf("enter dtm mode\r\n");
+    wdt_feed();
     dtm_error_code = dtm_init();           // Need to change default default timer0 in sdk
     if (dtm_error_code != DTM_SUCCESS)
     {
