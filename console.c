@@ -150,6 +150,7 @@ void console_process(void)
                 break;
             case CMD_DT: //into DTM Mode (for RF teset)
                 //com_port_function_set(COM_PORT_DTM);
+                set_key_state_dtm_mode();
                 printf("OK\r\n");
                 break;
             case CMD_RR: //Launch a software reset
@@ -173,7 +174,7 @@ void console_process(void)
                 {
                     parameter[12] = 0;//give string end
                     i = strtoull(parameter, &p, 16);
-                    if(i == 0)
+                    if (i == 0)
                     {
                         //Parameter error (not a nummber or zero).
                         printf("ERROR-3\r\n");
@@ -246,7 +247,6 @@ void console_process(void)
                 }
                 break;
             case CMD_ED://Write and Read Beacon Seed
-                NRF_LOG_INFO("len = %d", len);
                 if (paramlen == SEED_STR_LEN)
                 {
                     char seed_str[SEED_STR_LEN+1];
@@ -254,7 +254,7 @@ void console_process(void)
                     seed_str[SEED_STR_LEN] = 0;
                     if (parse_seed_data(seed_str, get_config()->seed_data))
                     {
-                        if(NRF_SUCCESS == store_config(get_config()))
+                        if (NRF_SUCCESS == store_config(get_config()))
                         {
                             //flag_mac_base_update_request = true;
                             //flag_beacon_mm_update_request = true;
@@ -272,15 +272,76 @@ void console_process(void)
                 }
                 else if (paramlen != 0)
                 {
-                    //Parameter length error.
                     printf("ERROR-1\r\n");
                 }
                 else
                 {
                     printf("SEED: ");
-                    for (i=0; i<SEED_LEN; i++)
+                    for (i = 0; i < SEED_LEN; i++)
                     {
                         printf("%02X", get_config()->seed_data[i]);
+                    }
+                    printf("\r\n");
+                }
+                break;
+            case CMD_UD:
+                if (paramlen == UUID_STR_LEN)
+                {
+                    static char uuid_str[UUID_STR_LEN+1];
+                    memcpy(uuid_str, parameter, UUID_STR_LEN);
+                    uuid_str[UUID_STR_LEN] = 0;
+                    parse_uuid_data(uuid_str, get_config()->uuid_normal);
+                    if (NRF_SUCCESS == store_config(get_config()))
+                    {
+                        //flag_beacon_mm_update_request = true;
+                        printf("OK\r\n");
+                    }
+                    else
+                    {
+                        printf("ERROR-5\r\n");
+                    }
+                }
+                else if (paramlen != 0)
+                {
+                    printf("ERROR-1\r\n");
+                }
+                else
+                {
+                    printf("UUID_NORMAL: ");
+                    for (i = 0; i < UUID_LEN; i++)
+                    {
+                        printf("%02X", get_config()->uuid_normal[i]);
+                    }
+                    printf("\r\n");
+                }
+                break;
+            case CMD_UL:
+                if(paramlen == UUID_STR_LEN)
+                {
+                    static char uuid_str[UUID_STR_LEN+1];
+                    memcpy(uuid_str, parameter, UUID_STR_LEN);
+                    uuid_str[UUID_STR_LEN] = 0;
+                    parse_uuid_data(uuid_str, get_config()->uuid_low_battery);
+                    if (NRF_SUCCESS == store_config(get_config()))
+                    {
+                        //flag_beacon_mm_update_request = true;
+                        printf("OK\r\n");
+                    }
+                    else
+                    {
+                        printf("ERROR-5\r\n");
+                    }
+                }
+                else if(paramlen != 0)
+                {
+                    printf("ERROR-1\r\n");
+                }
+                else
+                {
+                    printf("UUID_LOW_BATTERY: ");
+                    for (i = 0; i < UUID_LEN; i++)
+                    {
+                        printf("%02X", get_config()->uuid_low_battery[i]);
                     }
                     printf("\r\n");
                 }
@@ -300,6 +361,9 @@ void uart_event_handle(app_uart_evt_t * p_event)
     switch (p_event->evt_type)
     {
         case APP_UART_DATA_READY:
+            if (get_key_state()->is_dtm_mode)
+                return;
+
             UNUSED_VARIABLE(app_uart_get(&cmd_buffer[index]));
             index++;
 

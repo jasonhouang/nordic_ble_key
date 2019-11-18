@@ -54,6 +54,9 @@ SRC_FILES += \
   $(PROJ_DIR)/console.c \
   $(PROJ_DIR)/common.c \
   $(PROJ_DIR)/crc32_st.c \
+  $(PROJ_DIR)/dtm.c \
+  $(SDK_ROOT)/components/ble/ble_dtm/ble_dtm.c \
+  $(SDK_ROOT)/components/ble/ble_dtm/ble_dtm_hw_nrf52.c \
   $(SDK_ROOT)/external/segger_rtt/SEGGER_RTT.c \
   $(SDK_ROOT)/external/segger_rtt/SEGGER_RTT_Syscalls_GCC.c \
   $(SDK_ROOT)/external/segger_rtt/SEGGER_RTT_printf.c \

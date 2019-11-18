@@ -25,6 +25,7 @@
 #include "common.h"
 #include "sm3.h"
 #include "crc32.h"
+#include "dtm.h"
 
 #if defined (UART_PRESENT)
 #include "nrf_uart.h"
@@ -827,6 +828,10 @@ static void key_init(void)
     {
         printf("parse_seed_data error\r\n");
     }
+    uint8_t key_beacon_uuid[16] = {KEY_BEACON_UUID};
+    memcpy(get_config()->uuid_normal, key_beacon_uuid, 16);
+    uint8_t bat_beacon_uuid[16] = {BAT_BEACON_UUID};
+    memcpy(get_config()->uuid_low_battery, bat_beacon_uuid, 16);
 
     uint32_t pcb_id_crc = crc32_compute((uint8_t*)get_config()->device_id, 6, NULL);
     uint32_t key_crc = crc32_compute((uint8_t*)get_config()->seed_data, 32, &pcb_id_crc);
@@ -1248,7 +1253,7 @@ static void wdt_event_handler(void)
 
 nrf_drv_wdt_channel_id m_channel_id;
 
-static void wdt_feed(void)
+void wdt_feed(void)
 { 
     nrf_drv_wdt_channel_feed(m_channel_id);
 }
@@ -1333,7 +1338,6 @@ int main(void)
     uint32_t err_code;
     bool     erase_bonds;
 
-    // Initialize.
     timers_init();
 
     uart_init();
@@ -1358,20 +1362,22 @@ int main(void)
     local_mac_addr_set(mac_set);
     get_local_mac_addr();
     NRF_LOG_INFO("Application Start!");
-    //err_code = ble_advertising_start(&m_advertising, BLE_ADV_MODE_FAST);
-    //APP_ERROR_CHECK(err_code);
     application_timers_start();
     advertising_start();
-    //nrf_delay_ms(1000);
 
-    // Enter main loop.
     for (;;)
     {
         wdt_feed();
         UNUSED_RETURN_VALUE(NRF_LOG_PROCESS());
         app_sched_execute();
         power_manage();
+        if (get_key_state()->is_dtm_mode)
+        {
+            break;
+        }
     }
+
+    dtm_main();
 }
 
 

@@ -24,6 +24,7 @@
 typedef struct _key_state_t
 {
     bool is_low_power;
+    bool is_dtm_mode;
 } key_state_t;
 
 typedef struct _config_t
@@ -41,12 +42,15 @@ typedef struct _config_t
 void key_state_init(void);
 const key_state_t* get_key_state(void);
 void set_key_state_low_power(void);
+void set_key_state_dtm_mode(void);
 
 config_t* get_config(void);
 ret_code_t store_config(const config_t *config);
+bool parse_uuid_data(const char* uuidHexstr, uint8_t* out_sdata);
 bool parse_seed_data(const char* seed32Hexstr, uint8_t* out_sdata);
 void hex2str(const uint8_t* hex,uint16_t hex_len, uint8_t* str);
 
+void wdt_feed(void);
 #if 0
 #ifdef _GCC_WRAP_STDINT_H
 #undef _GCC_WRAP_STDINT_H

@@ -73,7 +73,7 @@
  
 
 #ifndef BLE_DTM_ENABLED
-#define BLE_DTM_ENABLED 0
+#define BLE_DTM_ENABLED 1
 #endif
 
 // <q> BLE_RACP_ENABLED  - ble_racp - Record Access Control Point library
