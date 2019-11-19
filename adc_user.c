@@ -4,8 +4,6 @@
 #include "adc_user.h"
 #include "common.h"
 
-#define SAMPLE_RATE 10000    //7800 - 200000
-
 static nrf_saadc_value_t data_buffer;
 
 void adc_user_uninit(void)
@@ -131,7 +129,7 @@ Blocking function to get VCC value of mV
 */
 uint32_t adc_user_get_vcc(int32_t* data)
 {
-	uint32_t erro_code = NRF_SUCCESS;
+	uint32_t err_code = NRF_SUCCESS;
     nrf_saadc_channel_config_t nrf_saadc_channel_config;
 
 	NRF_SAADC->SAMPLERATE = 0;
@@ -160,42 +158,41 @@ uint32_t adc_user_get_vcc(int32_t* data)
 	nrf_saadc_task_trigger(NRF_SAADC_TASK_START);
 	nrf_saadc_task_trigger(NRF_SAADC_TASK_SAMPLE);
 
-	while(false == nrf_saadc_event_check(NRF_SAADC_EVENT_END))
+	while (false == nrf_saadc_event_check(NRF_SAADC_EVENT_END))
 	{
 	
 	}
 	
-	*data = ((int32_t)225*data_buffer)>>8;
+	*data = ((int32_t)225 * data_buffer) >> 8;
 	nrf_saadc_event_clear(NRF_SAADC_EVENT_DONE);		
 	nrf_saadc_event_clear(NRF_SAADC_EVENT_END);		
 	
 	adc_user_uninit();
-	return erro_code;
+
+	return err_code;
 }
-
-
 
 static adc_user_finished_handler_t finished_handler = NULL;
 
-
 void SAADC_IRQHandler(void)
 {
-	if(nrf_saadc_event_check(NRF_SAADC_EVENT_STARTED))
+	if (nrf_saadc_event_check(NRF_SAADC_EVENT_STARTED))
 	{
 		nrf_saadc_event_clear(NRF_SAADC_EVENT_STARTED);
 	}
 
-	if(nrf_saadc_event_check(NRF_SAADC_EVENT_END))
+	if (nrf_saadc_event_check(NRF_SAADC_EVENT_END))
 	{
 		nrf_saadc_event_clear(NRF_SAADC_EVENT_END);
 	}
 
-	if(nrf_saadc_event_check(NRF_SAADC_EVENT_DONE))
+	if (nrf_saadc_event_check(NRF_SAADC_EVENT_DONE))
 	{
 		nrf_saadc_event_clear(NRF_SAADC_EVENT_DONE);		
 		nrf_saadc_int_disable(NRF_SAADC_INT_ALL);
 		nrf_saadc_disable();
-		if(finished_handler)
+
+		if (finished_handler)
 		{
 			finished_handler();
 		}
