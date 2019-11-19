@@ -10,6 +10,7 @@ static config_t config;
 void key_state_init(void)
 {
     key_state.is_low_power = false;
+    key_state.is_low_battery = false;
     key_state.is_dtm_mode = false;
 }
 
@@ -21,6 +22,11 @@ const key_state_t* get_key_state(void)
 void set_key_state_low_power(void)
 {
     key_state.is_low_power = true;
+}
+
+void set_key_state_low_battery(void)
+{
+    key_state.is_low_battery = true;
 }
 
 void set_key_state_dtm_mode(void)

@@ -26,6 +26,7 @@
 #include "sm3.h"
 #include "crc32.h"
 #include "dtm.h"
+#include "adc_user.h"
 
 #if defined (UART_PRESENT)
 #include "nrf_uart.h"
@@ -93,7 +94,9 @@
 #define APP_SCHED_QUEUE_SIZE     4                  /**< Maximum number of events in the scheduler queue. */
 
 //#define printf(...)
-#define CONSOLE_TIMEOUT                 30
+#define CONSOLE_TIMEOUT                     30
+#define VOLTAGE_CHECK_INTERVAL_NORMAL       3600
+#define VOLTAGE_CHECK_INTERVAL_FAST         60
 
 enum {
     OPEN_LOCK = 0,
@@ -109,6 +112,7 @@ NRF_BLE_GATT_DEF(m_gatt);                                                       
 BLE_ADVERTISING_DEF(m_advertising);                                                 /**< Advertising module instance. */
 APP_TIMER_DEF(m_task_timer_id);
 APP_TIMER_DEF(m_timer_scanner);
+APP_TIMER_DEF(m_timer_low_battery);
 
 static uint16_t   m_conn_handle          = BLE_CONN_HANDLE_INVALID;                 /**< Handle of the current connection. */
 static uint16_t   m_ble_nus_max_data_len = BLE_GATT_ATT_MTU_DEFAULT - 3;            /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Nordic UART service module. */
@@ -121,7 +125,10 @@ static ble_gap_adv_params_t m_adv_params;                                 /**< P
 
 volatile bool m_scanner_started = false;
 volatile bool m_adv_started = false;
-static uint16_t m_console_timeout = CONSOLE_TIMEOUT;
+static volatile uint16_t m_console_timeout = CONSOLE_TIMEOUT;
+static uint32_t m_voltage_check_interval = VOLTAGE_CHECK_INTERVAL_NORMAL;
+static volatile uint32_t m_voltage_check_timeout = VOLTAGE_CHECK_INTERVAL_NORMAL;
+static int32_t m_battery_voltage = 0;
 
 #define TARGET_VENDOR_DATA_LEN              16
 #define TARGET_PRODUCT_FILTER_DATA_LEN      6
@@ -1054,6 +1061,40 @@ static void log_init(void)
     NRF_LOG_DEFAULT_BACKENDS_INIT();
 }
 
+static uint8_t voltage_endure_counter = 5;
+static void check_battery(void)
+{
+    if (!get_key_state()->is_low_battery)
+    {
+        adc_user_get_vcc(&m_battery_voltage);
+        printf("VCC: %ldmV\r\n", m_battery_voltage);
+        if (m_battery_voltage < LOW_BATTERY)
+        {
+            m_voltage_check_interval = VOLTAGE_CHECK_INTERVAL_FAST;
+            if (m_voltage_check_timeout > m_voltage_check_interval)
+            {
+                m_voltage_check_timeout = m_voltage_check_interval;
+            }
+
+            if (voltage_endure_counter)
+            {
+                voltage_endure_counter --;
+            }
+            else
+            {
+                set_key_state_low_battery();
+                ret_code_t err_code = app_timer_start(m_timer_low_battery, APP_TIMER_TICKS(50), NULL);
+                APP_ERROR_CHECK(err_code);
+            }
+        }
+        else
+        {
+            m_voltage_check_interval = VOLTAGE_CHECK_INTERVAL_NORMAL;
+            voltage_endure_counter = 5;
+        }
+    }
+}
+
 static void app_task_handler(void * p_context)
 {
     //NRF_LOG_INFO("app_task_handler");
@@ -1067,11 +1108,47 @@ static void app_task_handler(void * p_context)
             printf("ZZzz...\r\n");
             uint32_t err_code = sd_app_evt_wait();
             APP_ERROR_CHECK(err_code);
+            nrf_delay_ms(10);
             err_code = app_uart_close();
             APP_ERROR_CHECK(err_code);
             set_key_state_low_power();
         }
     }
+
+    if (m_voltage_check_timeout)
+    {
+        m_voltage_check_timeout --;
+        if (!m_voltage_check_timeout)
+        {
+            check_battery();        
+            m_voltage_check_timeout = m_voltage_check_interval;
+        }
+    }
+}
+
+static uint8_t low_battery_ticks = 0;
+static void app_low_battery_handler(void * p_context)
+{
+    if (low_battery_ticks >= 200)
+    {
+        low_battery_ticks = 0;
+    }
+    if (low_battery_ticks < 10)
+    {
+        if (0 == (low_battery_ticks % 4))
+        {
+            bsp_board_led_on(BSP_LED_0);
+        }
+        else
+        {
+            bsp_board_led_off(BSP_LED_0);
+        }
+    }
+    else
+    {
+        bsp_board_led_off(BSP_LED_0);
+    }
+    low_battery_ticks ++;
 }
 
 static void app_timer_scanner(void * p_context)
@@ -1090,6 +1167,9 @@ static void timers_init(void)
     APP_ERROR_CHECK(err_code);
 
     err_code = app_timer_create(&m_task_timer_id, APP_TIMER_MODE_REPEATED, app_task_handler);
+    APP_ERROR_CHECK(err_code);
+
+    err_code = app_timer_create(&m_timer_low_battery, APP_TIMER_MODE_REPEATED, app_low_battery_handler);
     APP_ERROR_CHECK(err_code);
 
     err_code = app_timer_create(&m_timer_scanner, APP_TIMER_MODE_SINGLE_SHOT, app_timer_scanner);
@@ -1364,6 +1444,7 @@ int main(void)
     NRF_LOG_INFO("Application Start!");
     application_timers_start();
     advertising_start();
+    check_battery();
 
     for (;;)
     {

@@ -43,6 +43,7 @@ SRC_FILES += \
   $(SDK_ROOT)/components/drivers_nrf/gpiote/nrf_drv_gpiote.c \
   $(SDK_ROOT)/components/drivers_nrf/wdt/nrf_drv_wdt.c \
   $(SDK_ROOT)/components/drivers_nrf/uart/nrf_drv_uart.c \
+  $(SDK_ROOT)/components/drivers_nrf/hal/nrf_saadc.c \
   $(SDK_ROOT)/components/libraries/bsp/bsp.c \
   $(SDK_ROOT)/components/libraries/bsp/bsp_btn_ble.c \
   $(SDK_ROOT)/components/libraries/bsp/bsp_nfc.c \
@@ -55,6 +56,7 @@ SRC_FILES += \
   $(PROJ_DIR)/common.c \
   $(PROJ_DIR)/crc32_st.c \
   $(PROJ_DIR)/dtm.c \
+  $(PROJ_DIR)/adc_user.c \
   $(PROJ_DIR)/ble_dtm/ble_dtm.c \
   $(PROJ_DIR)/ble_dtm/ble_dtm_hw_nrf52.c \
   $(SDK_ROOT)/external/segger_rtt/SEGGER_RTT.c \
