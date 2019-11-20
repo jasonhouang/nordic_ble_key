@@ -12,6 +12,10 @@ void key_state_init(void)
     key_state.is_low_power = false;
     key_state.is_low_battery = false;
     key_state.is_dtm_mode = false;
+    key_state.is_button_open_pushed = false;
+    key_state.is_button_close_pushed = false;
+    key_state.is_scan_open = false;
+    key_state.is_scan_close = false;
 }
 
 const key_state_t* get_key_state(void)
@@ -24,6 +28,11 @@ void set_key_state_low_power(void)
     key_state.is_low_power = true;
 }
 
+void clear_key_state_low_power(void)
+{
+    key_state.is_low_power = false;
+}
+
 void set_key_state_low_battery(void)
 {
     key_state.is_low_battery = true;
@@ -32,6 +41,48 @@ void set_key_state_low_battery(void)
 void set_key_state_dtm_mode(void)
 {
     key_state.is_dtm_mode = true;
+}
+
+void set_key_state_bt_open_pushed(void)
+{
+    key_state.is_button_open_pushed = true;
+}
+
+void set_key_state_bt_open_released(void)
+{
+    key_state.is_button_open_pushed = false;
+}
+
+void set_key_state_bt_close_pushed(void)
+{
+    key_state.is_button_close_pushed = true;
+}
+
+void set_key_state_bt_close_released(void)
+{
+    key_state.is_button_close_pushed = false;
+}
+
+void set_key_state_scan_open(void)
+{
+    key_state.is_scan_open = true;
+    key_state.is_scan_close = false;
+}
+
+void clear_key_state_scan_open(void)
+{
+    key_state.is_scan_open = false;
+}
+
+void set_key_state_scan_close(void)
+{
+    key_state.is_scan_open = false;
+    key_state.is_scan_close = true;
+}
+
+void clear_key_state_scan_close(void)
+{
+    key_state.is_scan_close = false;
 }
 
 config_t * get_config(void)

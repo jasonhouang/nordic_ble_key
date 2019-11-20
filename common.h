@@ -20,12 +20,17 @@
 
 #define LOW_BATTERY                                         2500
 #define MY_LOCKER_NAME_SIZE                                 7
+#define BUTTON_HOLD_TIMEOUT                                 5
 
 typedef struct _key_state_t
 {
     bool is_low_power;
     bool is_low_battery;
     bool is_dtm_mode;
+    bool is_button_open_pushed;
+    bool is_button_close_pushed;
+    bool is_scan_open;
+    bool is_scan_close;
 } key_state_t;
 
 typedef struct _config_t
@@ -43,8 +48,17 @@ typedef struct _config_t
 void key_state_init(void);
 const key_state_t* get_key_state(void);
 void set_key_state_low_power(void);
+void clear_key_state_low_power(void);
 void set_key_state_low_battery(void);
 void set_key_state_dtm_mode(void);
+void set_key_state_bt_open_pushed(void);
+void set_key_state_bt_open_released(void);
+void set_key_state_bt_close_pushed(void);
+void set_key_state_bt_close_released(void);
+void set_key_state_scan_open(void);
+void clear_key_state_scan_open(void);
+void set_key_state_scan_close(void);
+void clear_key_state_scan_close(void);
 
 config_t* get_config(void);
 ret_code_t store_config(const config_t *config);

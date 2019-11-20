@@ -71,9 +71,9 @@
 #define APP_ADV_INTERVAL                64                                          /**< The advertising interval (in units of 0.625 ms. This value corresponds to 40 ms). */
 #define APP_ADV_TIMEOUT_IN_SECONDS      0                                         /**< The advertising timeout (in units of seconds). */
 
-#define SCAN_INTERVAL           8000                                  /**< Determines scan interval in units of 0.625 millisecond. */
-#define SCAN_WINDOW             8000                                  /**< Determines scan window in units of 0.625 millisecond. */
-#define SCAN_TIMEOUT               5                                  /**< Timout when scanning. 0x0000 disables timeout. */
+#define SCAN_INTERVAL                   150                                  /**< Determines scan interval in units of 0.625 millisecond. */
+#define SCAN_WINDOW                     150                                  /**< Determines scan window in units of 0.625 millisecond. */
+#define SCAN_TIMEOUT                    5                                    /**< Timout when scanning. 0x0000 disables timeout. */
 
 #define MIN_CONN_INTERVAL               MSEC_TO_UNITS(20, UNIT_1_25_MS)             /**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
 #define MAX_CONN_INTERVAL               MSEC_TO_UNITS(75, UNIT_1_25_MS)             /**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
@@ -94,7 +94,7 @@
 #define APP_SCHED_QUEUE_SIZE     4                  /**< Maximum number of events in the scheduler queue. */
 
 //#define printf(...)
-#define CONSOLE_TIMEOUT                     30
+#define CONSOLE_TIMEOUT                     60
 #define VOLTAGE_CHECK_INTERVAL_NORMAL       3600
 #define VOLTAGE_CHECK_INTERVAL_FAST         60
 
@@ -111,7 +111,6 @@ BLE_NUS_DEF(m_nus);                                                             
 NRF_BLE_GATT_DEF(m_gatt);                                                           /**< GATT module instance. */
 BLE_ADVERTISING_DEF(m_advertising);                                                 /**< Advertising module instance. */
 APP_TIMER_DEF(m_task_timer_id);
-APP_TIMER_DEF(m_timer_scanner);
 APP_TIMER_DEF(m_timer_low_battery);
 
 static uint16_t   m_conn_handle          = BLE_CONN_HANDLE_INVALID;                 /**< Handle of the current connection. */
@@ -126,6 +125,7 @@ static ble_gap_adv_params_t m_adv_params;                                 /**< P
 volatile bool m_scanner_started = false;
 volatile bool m_adv_started = false;
 static volatile uint16_t m_console_timeout = CONSOLE_TIMEOUT;
+static uint32_t m_button_hold_timeout = BUTTON_HOLD_TIMEOUT;
 static uint32_t m_voltage_check_interval = VOLTAGE_CHECK_INTERVAL_NORMAL;
 static volatile uint32_t m_voltage_check_timeout = VOLTAGE_CHECK_INTERVAL_NORMAL;
 static int32_t m_battery_voltage = 0;
@@ -477,6 +477,16 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context)
             m_conn_handle = BLE_CONN_HANDLE_INVALID;
             break;
 
+        case BLE_GAP_EVT_TIMEOUT:
+            if (BLE_GAP_TIMEOUT_SRC_SCAN == p_ble_evt->evt.gap_evt.params.timeout.src)
+            {
+                clear_key_state_scan_open();
+                clear_key_state_scan_close();
+                m_scanner_started  = false;
+                advertising_start();
+                printf("scan timeout\r\n");
+            }
+            break;
 #ifndef S140
         case BLE_GAP_EVT_PHY_UPDATE_REQUEST:
         {
@@ -820,10 +830,10 @@ static void advertising_init(void)
 
 #if 1
 
-//const static uint8_t pcb_id[] = {0xA7, 0x2D, 0xFF, 0x8C, 0x96, 0x72};
-//const static uint8_t key_seed[] = "13989DDD23516A7147DFF970F020684F0A5ECFC44D261123E1E64EC706578E7E";
-const static uint8_t pcb_id[] = {0x5a, 0xcf, 0x30, 0x2c, 0x34, 0x0d};
-const static uint8_t key_seed[] = "4C736A750EAFA28F6530532CB3561A4C56B2FE1B26397E1C668A25276FE8EB5A";
+const static uint8_t pcb_id[] = {0xA7, 0x2D, 0xFF, 0x8C, 0x96, 0x72};
+const static uint8_t key_seed[] = "13989DDD23516A7147DFF970F020684F0A5ECFC44D261123E1E64EC706578E7E";
+//const static uint8_t pcb_id[] = {0x5a, 0xcf, 0x30, 0x2c, 0x34, 0x0d};
+//const static uint8_t key_seed[] = "4C736A750EAFA28F6530532CB3561A4C56B2FE1B26397E1C668A25276FE8EB5A";
 
 
 static void key_init(void)
@@ -875,13 +885,31 @@ static uint8_t sum_check_gen(uint8_t mac4)
 
 static void scheduler_scan_trigger(void * p_event_data, uint16_t event_size)
 {
-    if (m_scanner_started)
-        return;
-
     //get_local_mac_addr();
     ctl_cmd = *(ctl_cmd_t *)p_event_data;
 
-    advertising_stop();
+    if (ctl_cmd.cmd == OPEN_LOCK && get_key_state()->is_scan_open)
+    {
+        printf("scan open is started\r\n");
+        return;
+    }
+
+    if (ctl_cmd.cmd == CLOSE_LOCK && get_key_state()->is_scan_close)
+    {
+        printf("scan close is started\r\n");
+        return;
+    }
+
+    if (m_scanner_started)
+    {
+        uint32_t err_code = sd_ble_gap_scan_stop();
+        APP_ERROR_CHECK(err_code);
+        m_scanner_started = false;
+    }
+    else
+    {
+        advertising_stop();
+    }
 
     mac_set[2] = (uint8_t)(get_config()->crc24);
     mac_set[3] = (uint8_t)(get_config()->crc24 >> 8);
@@ -893,6 +921,7 @@ static void scheduler_scan_trigger(void * p_event_data, uint16_t event_size)
         mac_set[0] = sum_check_gen(mac_set[1]);
         local_mac_addr_set(mac_set);
         get_local_mac_addr();
+        set_key_state_scan_open();
     }
     else
     {
@@ -900,6 +929,7 @@ static void scheduler_scan_trigger(void * p_event_data, uint16_t event_size)
         mac_set[0] = sum_check_gen(mac_set[1]);
         local_mac_addr_set(mac_set);
         get_local_mac_addr();
+        set_key_state_scan_close();
     }
 
     scan_start();
@@ -912,13 +942,13 @@ static void scheduler_scan_trigger(void * p_event_data, uint16_t event_size)
 static void button_evt_handler(uint8_t pin_no, uint8_t button_action)
 {
     ret_code_t err_code;
-    static bool flag_state_lock = false;
 
     if (pin_no == BUTTON_OPEN_PIN)
     {
         if (button_action == APP_BUTTON_PUSH)
         {
-            printf("open key push\r\n");
+            //printf("open key push\r\n");
+            set_key_state_bt_open_pushed();
             err_code = bsp_indication_set(BSP_INDICATE_SENT_OK);
             APP_ERROR_CHECK(err_code);
 
@@ -928,67 +958,27 @@ static void button_evt_handler(uint8_t pin_no, uint8_t button_action)
         }
         else
         {
-            printf("open key release\r\n");
+            set_key_state_bt_open_released();
+            //printf("open key release\r\n");
         }
     }
-#if 0
-            flag_button_close_down = true;
-            led_on();
-            app_timer_start(m_timer_button, APP_TIMER_TICKS(50), NULL);
-            if(flag_state_lock)
-            {
-                flag_button_close_event_pending = true;
-                flag_state_lock = false;
-            }
-            else
-            {
-                flag_button_open_event_pending = true;
-                flag_state_lock = true;
-            }
-        }
-        else
-        {
-            flag_button_close_down = false;
-            led_off();
-        }
-#endif
     if (pin_no == BUTTON_CLOSE_PIN)
     {
         if (button_action == APP_BUTTON_PUSH)
         {
-            //uart_init();
+            set_key_state_bt_close_pushed();
             err_code = bsp_indication_set(BSP_INDICATE_SENT_OK);
             APP_ERROR_CHECK(err_code);
-            printf("close key push\r\n");
+            //printf("close key push\r\n");
             ctl_cmd_t ctl_cmd = { .cmd = CLOSE_LOCK };
             err_code = app_sched_event_put(&ctl_cmd, sizeof(ctl_cmd_t), scheduler_scan_trigger);
             APP_ERROR_CHECK(err_code);
         }
         else
         {
-            printf("close key release\r\n");
+            set_key_state_bt_close_released();
+            //printf("close key release\r\n");
         }
-#if 0
-            flag_button_open_down = true;
-            led_on();
-            app_timer_start(m_timer_button, APP_TIMER_TICKS(50), NULL);
-            if(flag_state_lock)
-            {
-                flag_button_close_event_pending = true;
-                flag_state_lock = false;
-            }
-            else
-            {
-                flag_button_open_event_pending = true;
-                flag_state_lock = true;
-            }
-        }
-        else
-        {
-            led_off();
-            flag_button_open_down = false;
-        }
-#endif
     }
 }
 
@@ -1124,6 +1114,25 @@ static void app_task_handler(void * p_context)
             m_voltage_check_timeout = m_voltage_check_interval;
         }
     }
+
+    if (get_key_state()->is_button_open_pushed && get_key_state()->is_button_close_pushed)
+    {
+        if (m_button_hold_timeout)
+        {
+            m_button_hold_timeout --;
+            if (!m_button_hold_timeout)
+            {
+                uart_init();
+                clear_key_state_low_power();
+                m_console_timeout = CONSOLE_TIMEOUT;
+                printf("Console avaliable in %d seconds.\r\n", CONSOLE_TIMEOUT);
+            }
+        }
+    }
+    else
+    {
+        m_button_hold_timeout = BUTTON_HOLD_TIMEOUT;
+    }
 }
 
 static uint8_t low_battery_ticks = 0;
@@ -1170,9 +1179,6 @@ static void timers_init(void)
     APP_ERROR_CHECK(err_code);
 
     err_code = app_timer_create(&m_timer_low_battery, APP_TIMER_MODE_REPEATED, app_low_battery_handler);
-    APP_ERROR_CHECK(err_code);
-
-    err_code = app_timer_create(&m_timer_scanner, APP_TIMER_MODE_SINGLE_SHOT, app_timer_scanner);
     APP_ERROR_CHECK(err_code);
 }
 
@@ -1302,9 +1308,6 @@ static void scan_start(void)
 
     err_code = sd_ble_gap_scan_start(&m_scan_params);
     APP_ERROR_CHECK(err_code);
-
-    err_code = app_timer_start(m_timer_scanner, APP_TIMER_TICKS(5000), NULL);
-    APP_ERROR_CHECK(err_code);
 }
 
 static void scan_stop(void)
@@ -1313,11 +1316,8 @@ static void scan_stop(void)
 
     if (m_scanner_started)
     {
-        err_code = app_timer_stop(m_timer_scanner);
-        APP_ERROR_CHECK(err_code);
-
         err_code = sd_ble_gap_scan_stop();
-        //APP_ERROR_CHECK(err_code);
+        APP_ERROR_CHECK(err_code);
 
         m_scanner_started  = false;
 
