@@ -393,7 +393,6 @@ static void on_adv_evt(ble_adv_evt_t ble_adv_evt)
     }
 }
 
-
 static void parse_adv_report(ble_gap_evt_adv_report_t const * p_adv_report)
 {
     ret_code_t   err_code;
@@ -443,11 +442,29 @@ static void parse_adv_report(ble_gap_evt_adv_report_t const * p_adv_report)
             //printf("0x%02x,0x%02x\r\n", p_ebox_state[0], p_ebox_state[1]);
             if (p_ebox_state[1] == 0x68 && ctl_cmd.cmd == OPEN_LOCK)
             {
+                if (get_key_state()->is_lock_state_changed)
+                {
+                    get_scan_count()->m_scan_count ++;
+                    clear_lock_state_changed();
+                }
                 scan_stop();
+            }
+            else if (p_ebox_state[1] == 0x68 && ctl_cmd.cmd == CLOSE_LOCK)
+            {
+                set_lock_state_changed();
             }
             else if (p_ebox_state[1] == 0x69 && ctl_cmd.cmd == CLOSE_LOCK)
             {
+                if (get_key_state()->is_lock_state_changed)
+                {
+                    get_scan_count()->m_scan_count ++;
+                    clear_lock_state_changed();
+                }
                 scan_stop();
+            }
+            else if (p_ebox_state[1] == 0x69 && ctl_cmd.cmd == OPEN_LOCK)
+            {
+                set_lock_state_changed();
             }
         }
     }
@@ -485,6 +502,7 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context)
                 m_scanner_started  = false;
                 advertising_start();
                 printf("scan timeout\r\n");
+                get_scan_count()->m_scan_count ++;
             }
             break;
 #ifndef S140
@@ -915,9 +933,10 @@ static void scheduler_scan_trigger(void * p_event_data, uint16_t event_size)
     mac_set[3] = (uint8_t)(get_config()->crc24 >> 8);
     mac_set[4] = (uint8_t)(get_config()->crc24 >> 16);
 
+    printf("m_scan_count = %d\r\n", get_scan_count()->m_scan_count);
     if (ctl_cmd.cmd == OPEN_LOCK)
     {
-        mac_set[1] = 0x01;
+        mac_set[1] = 0x01 | (get_scan_count()->m_scan_count << 1);
         mac_set[0] = sum_check_gen(mac_set[1]);
         local_mac_addr_set(mac_set);
         get_local_mac_addr();
@@ -925,7 +944,7 @@ static void scheduler_scan_trigger(void * p_event_data, uint16_t event_size)
     }
     else
     {
-        mac_set[1] = 0x00;
+        mac_set[1] = 0x00 | (get_scan_count()->m_scan_count << 1);
         mac_set[0] = sum_check_gen(mac_set[1]);
         local_mac_addr_set(mac_set);
         get_local_mac_addr();
@@ -1319,6 +1338,9 @@ static void scan_stop(void)
         err_code = sd_ble_gap_scan_stop();
         APP_ERROR_CHECK(err_code);
 
+        clear_key_state_scan_open();
+        clear_key_state_scan_close();
+
         m_scanner_started  = false;
 
         printf("scan stopped\r\n");
@@ -1445,6 +1467,7 @@ int main(void)
     application_timers_start();
     advertising_start();
     check_battery();
+    printf("%s\r\n", (char *)get_date_time());
 
     for (;;)
     {

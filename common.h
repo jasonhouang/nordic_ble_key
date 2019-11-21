@@ -22,6 +22,8 @@
 #define MY_LOCKER_NAME_SIZE                                 7
 #define BUTTON_HOLD_TIMEOUT                                 5
 
+#define SCAN_MAGIC_NUM                                      0xDEADBEEF
+
 typedef struct _key_state_t
 {
     bool is_low_power;
@@ -31,6 +33,7 @@ typedef struct _key_state_t
     bool is_button_close_pushed;
     bool is_scan_open;
     bool is_scan_close;
+    bool is_lock_state_changed;
 } key_state_t;
 
 typedef struct _config_t
@@ -45,6 +48,13 @@ typedef struct _config_t
     uint8_t uuid_low_battery[UUID_LEN];
 } config_t;
 
+typedef struct _scan_count_t
+{
+    uint8_t m_scan_count;
+    uint32_t magic;
+} scan_count_t;
+
+scan_count_t * get_scan_count(void);
 void key_state_init(void);
 const key_state_t* get_key_state(void);
 void set_key_state_low_power(void);
@@ -59,6 +69,8 @@ void set_key_state_scan_open(void);
 void clear_key_state_scan_open(void);
 void set_key_state_scan_close(void);
 void clear_key_state_scan_close(void);
+void set_lock_state_changed(void);
+void clear_lock_state_changed(void);
 
 config_t* get_config(void);
 ret_code_t store_config(const config_t *config);

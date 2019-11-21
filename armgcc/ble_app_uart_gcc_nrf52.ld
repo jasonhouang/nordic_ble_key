@@ -48,6 +48,12 @@ SECTIONS
         KEEP(*(.retained_setion))
         PROVIDE(__stop_retained_section = .);
     } > RAM
+    .scan_count_section (NOLOAD) :
+    {
+        PROVIDE(__start_scan_count_section = .);
+        KEEP(*(.scan_count_section))
+        PROVIDE(__stop_scan_count_section = .);
+    } > RAM
 }
 
 SECTIONS

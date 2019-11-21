@@ -7,8 +7,16 @@
 static key_state_t key_state;
 static config_t config;
 
+NRF_SECTION_ITEM_REGISTER(scan_count_section, static scan_count_t scan_count) = {0, SCAN_MAGIC_NUM};
+
 void key_state_init(void)
 {
+    if (SCAN_MAGIC_NUM != scan_count.magic)
+    {
+        scan_count.magic = SCAN_MAGIC_NUM;
+        scan_count.m_scan_count = 0;
+    }
+
     key_state.is_low_power = false;
     key_state.is_low_battery = false;
     key_state.is_dtm_mode = false;
@@ -16,6 +24,12 @@ void key_state_init(void)
     key_state.is_button_close_pushed = false;
     key_state.is_scan_open = false;
     key_state.is_scan_close = false;
+    key_state.is_lock_state_changed = false;
+}
+
+scan_count_t * get_scan_count(void)
+{
+    return &scan_count;
 }
 
 const key_state_t* get_key_state(void)
@@ -83,6 +97,16 @@ void set_key_state_scan_close(void)
 void clear_key_state_scan_close(void)
 {
     key_state.is_scan_close = false;
+}
+
+void set_lock_state_changed(void)
+{
+    key_state.is_lock_state_changed = true;
+}
+
+void clear_lock_state_changed(void)
+{
+    key_state.is_lock_state_changed = false;
 }
 
 config_t * get_config(void)
