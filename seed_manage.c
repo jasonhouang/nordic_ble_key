@@ -54,6 +54,11 @@ void check_is_need_update_majorminor(void)
     }
 }
 
+const majorminor_t* get_majorminor(void)
+{
+    return (const majorminor_t *)&m_majorminor;
+}
+
 #if 0
 bool is_seed_changed(void)
 {

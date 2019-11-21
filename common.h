@@ -42,10 +42,12 @@ typedef struct _config_t
     uint32_t len;
     uint32_t check_key;                          //Must equal to Magic key
     uint32_t crc24;
+    uint32_t beacon_id;
     uint8_t device_id[DEVICE_ID_LEN];
     uint8_t seed_data[SEED_LEN];
     uint8_t uuid_normal[UUID_LEN];
     uint8_t uuid_low_battery[UUID_LEN];
+    uint8_t uuid_voltage[UUID_LEN];
 } config_t;
 
 typedef struct _scan_count_t

@@ -63,6 +63,11 @@
                                         0xAF, 0x92, 0x25, 0xC2, \
                                         0x20, 0xA2, 0x4A, 0xAD            /**< UUID for LOW_BAT: 8B91B3DF-EF01-42A1-AF92-25C220A24AAD */
 
+#define VOL_BEACON_UUID                 0xEC, 0xEF, 0xB9, 0x9D, \
+                                        0xEF, 0x01, 0x4A, 0xCA, \
+                                        0xAE, 0x4C, 0x61, 0xC8, \
+                                        0xAB, 0xE1, 0x77, 0x50            /**< UUID for BAT_VOL: ECEFB99D-EF01-4ACA-AE4C-61C8ABE17750 */
+
 #define DEVICE_NAME                     "Nordic_UART"                               /**< Name of device. Will be included in the advertising data. */
 #define NUS_SERVICE_UUID_TYPE           BLE_UUID_TYPE_VENDOR_BEGIN                  /**< UUID type for the Nordic UART Service (vendor specific). */
 
@@ -98,6 +103,8 @@
 #define VOLTAGE_CHECK_INTERVAL_NORMAL       3600
 #define VOLTAGE_CHECK_INTERVAL_FAST         60
 
+#define VOLTAGE_ADV_PERIOD                  60
+
 enum {
     OPEN_LOCK = 0,
     CLOSE_LOCK,
@@ -129,6 +136,8 @@ static uint32_t m_button_hold_timeout = BUTTON_HOLD_TIMEOUT;
 static uint32_t m_voltage_check_interval = VOLTAGE_CHECK_INTERVAL_NORMAL;
 static volatile uint32_t m_voltage_check_timeout = VOLTAGE_CHECK_INTERVAL_NORMAL;
 static int32_t m_battery_voltage = 0;
+static uint8_t vol_adv_count = VOLTAGE_ADV_PERIOD;
+static bool is_advertising_changed = false;
 
 #define TARGET_VENDOR_DATA_LEN              16
 #define TARGET_PRODUCT_FILTER_DATA_LEN      6
@@ -144,6 +153,15 @@ static uint8_t key_crc24[7];
 static uint8_t mac_set[] = {0x00, 0x01, 0xbe, 0xb9, 0x47, 0x81};
 static ctl_cmd_t ctl_cmd = { .cmd = OPEN_LOCK };
 
+typedef struct _ibeacon_t {
+    uint8_t type;
+    uint8_t length;
+    uint8_t uuid[16];
+    uint16_t major;
+    uint16_t minor;
+    uint8_t rssi;
+} ibeacon_t;
+
 static uint8_t m_beacon_info[APP_BEACON_INFO_LENGTH] =                    /**< Information advertised by the Beacon. */
 {
     APP_DEVICE_TYPE,     // Manufacturer specific information. Specifies the device type in this
@@ -151,6 +169,32 @@ static uint8_t m_beacon_info[APP_BEACON_INFO_LENGTH] =                    /**< I
     APP_ADV_DATA_LENGTH, // Manufacturer specific information. Specifies the length of the
     // manufacturer specific data in this implementation.
     KEY_BEACON_UUID,     // 128 bit UUID value.
+    APP_MAJOR_VALUE,     // Major arbitrary value that can be used to distinguish between Beacons.
+    APP_MINOR_VALUE,     // Minor arbitrary value that can be used to distinguish between Beacons.
+    APP_MEASURED_RSSI    // Manufacturer specific information. The Beacon's measured TX power in
+        // this implementation.
+};
+
+static uint8_t m_beacon_bat[APP_BEACON_INFO_LENGTH] =                    /**< Information advertised by the Beacon. */
+{
+    APP_DEVICE_TYPE,     // Manufacturer specific information. Specifies the device type in this
+    // implementation.
+    APP_ADV_DATA_LENGTH, // Manufacturer specific information. Specifies the length of the
+    // manufacturer specific data in this implementation.
+    BAT_BEACON_UUID,     // 128 bit UUID value.
+    APP_MAJOR_VALUE,     // Major arbitrary value that can be used to distinguish between Beacons.
+    APP_MINOR_VALUE,     // Minor arbitrary value that can be used to distinguish between Beacons.
+    APP_MEASURED_RSSI    // Manufacturer specific information. The Beacon's measured TX power in
+        // this implementation.
+};
+
+static uint8_t m_beacon_vol[APP_BEACON_INFO_LENGTH] =                    /**< Information advertised by the Beacon. */
+{
+    APP_DEVICE_TYPE,     // Manufacturer specific information. Specifies the device type in this
+    // implementation.
+    APP_ADV_DATA_LENGTH, // Manufacturer specific information. Specifies the length of the
+    // manufacturer specific data in this implementation.
+    VOL_BEACON_UUID,     // 128 bit UUID value.
     APP_MAJOR_VALUE,     // Major arbitrary value that can be used to distinguish between Beacons.
     APP_MINOR_VALUE,     // Minor arbitrary value that can be used to distinguish between Beacons.
     APP_MEASURED_RSSI    // Manufacturer specific information. The Beacon's measured TX power in
@@ -822,6 +866,10 @@ static void advertising_init(void)
 
     manuf_specific_data.company_identifier = APP_COMPANY_IDENTIFIER;
 
+    ibeacon_t *p_beacon = (ibeacon_t *)&m_beacon_info;
+    p_beacon->major = get_majorminor()->major;
+    p_beacon->minor = get_majorminor()->minor;
+
     manuf_specific_data.data.p_data = (uint8_t *) m_beacon_info;
     manuf_specific_data.data.size   = APP_BEACON_INFO_LENGTH;
 
@@ -843,6 +891,93 @@ static void advertising_init(void)
     m_adv_params.fp          = BLE_GAP_ADV_FP_ANY;
     m_adv_params.interval    = NON_CONNECTABLE_ADV_INTERVAL;
     m_adv_params.timeout     = 0;       // Never time out.
+}
+
+static void set_advertising_normal(void)
+{
+    uint32_t      err_code;
+    ble_advdata_t advdata;
+    uint8_t       flags = BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED;
+
+    ble_advdata_manuf_data_t manuf_specific_data;
+
+    manuf_specific_data.company_identifier = APP_COMPANY_IDENTIFIER;
+
+    ibeacon_t *p_beacon = (ibeacon_t *)&m_beacon_info;
+    p_beacon->major = get_majorminor()->major;
+    p_beacon->minor = get_majorminor()->minor;
+    
+    manuf_specific_data.data.p_data = (uint8_t *) m_beacon_info;
+    manuf_specific_data.data.size   = APP_BEACON_INFO_LENGTH;
+
+    // Build and set advertising data.
+    memset(&advdata, 0, sizeof(advdata));
+
+    advdata.name_type             = BLE_ADVDATA_NO_NAME;
+    advdata.flags                 = flags;
+    advdata.p_manuf_specific_data = &manuf_specific_data;
+
+    err_code = ble_advdata_set(&advdata, NULL);
+    APP_ERROR_CHECK(err_code);
+}
+
+static void set_advertising_battery(void)
+{
+    uint32_t      err_code;
+    ble_advdata_t advdata;
+    uint8_t       flags = BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED;
+
+    ble_advdata_manuf_data_t manuf_specific_data;
+
+    manuf_specific_data.company_identifier = APP_COMPANY_IDENTIFIER;
+
+    ibeacon_t *p_beacon = (ibeacon_t *)&m_beacon_bat;
+    p_beacon->major = get_majorminor()->major;
+    p_beacon->minor = get_majorminor()->minor;
+    
+    manuf_specific_data.data.p_data = (uint8_t *) m_beacon_bat;
+    manuf_specific_data.data.size   = APP_BEACON_INFO_LENGTH;
+
+    // Build and set advertising data.
+    memset(&advdata, 0, sizeof(advdata));
+
+    advdata.name_type             = BLE_ADVDATA_NO_NAME;
+    advdata.flags                 = flags;
+    advdata.p_manuf_specific_data = &manuf_specific_data;
+
+    err_code = ble_advdata_set(&advdata, NULL);
+    APP_ERROR_CHECK(err_code);
+}
+
+static void update_advertising_voltage(void)
+{
+    uint32_t      err_code;
+    ble_advdata_t advdata;
+    uint8_t       flags = BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED;
+
+    ble_advdata_manuf_data_t manuf_specific_data;
+
+    manuf_specific_data.company_identifier = APP_COMPANY_IDENTIFIER;
+
+    adc_user_get_vcc(&m_battery_voltage);
+    uint8_t voltage_coded = m_battery_voltage / 10 - 100;
+    ibeacon_t *p_beacon = (ibeacon_t *)&m_beacon_vol;
+
+    p_beacon->major = 0x1000 | ((get_config()->beacon_id >> 8) & 0x0FFF);
+    p_beacon->minor = (get_config()->beacon_id & 0x00FF) | voltage_coded;
+    
+    manuf_specific_data.data.p_data = (uint8_t *) m_beacon_vol;
+    manuf_specific_data.data.size   = APP_BEACON_INFO_LENGTH;
+
+    // Build and set advertising data.
+    memset(&advdata, 0, sizeof(advdata));
+
+    advdata.name_type             = BLE_ADVDATA_NO_NAME;
+    advdata.flags                 = flags;
+    advdata.p_manuf_specific_data = &manuf_specific_data;
+
+    err_code = ble_advdata_set(&advdata, NULL);
+    APP_ERROR_CHECK(err_code);
 }
 #endif
 
@@ -1104,11 +1239,40 @@ static void check_battery(void)
     }
 }
 
+
 static void app_task_handler(void * p_context)
 {
     //NRF_LOG_INFO("app_task_handler");
     //printf("%s\r\n", (char *)get_date_time());
     check_is_need_update_majorminor();
+
+    if (vol_adv_count)
+    {
+        vol_adv_count --;
+        if (!vol_adv_count)
+        {
+            is_advertising_changed = true;
+            vol_adv_count = VOLTAGE_ADV_PERIOD;
+            advertising_stop();
+            update_advertising_voltage();
+            advertising_start();
+        }
+    }
+    if (is_advertising_changed)
+    {
+        is_advertising_changed = false;
+        advertising_stop();
+        if (get_key_state()->is_low_battery)
+        {
+            set_advertising_battery();
+        }
+        else
+        {
+            set_advertising_normal();
+        }
+        advertising_start();
+    }
+
     if (m_console_timeout)
     {
         m_console_timeout --;

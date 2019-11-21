@@ -11,6 +11,7 @@ typedef struct _majorminor_t {
 
 void check_is_need_update_majorminor(void);
 void update_majorminor(void);
+const majorminor_t* get_majorminor(void);
 //bool is_seed_changed(void);
 //bool is_has_majorminor(majorminor_t* majorminor);
 
