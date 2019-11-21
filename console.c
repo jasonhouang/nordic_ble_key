@@ -8,6 +8,7 @@
 #include "console.h"
 #include "common.h"
 #include "sys_time.h"
+#include "adc_user.h"
 
 #define UART_RX_MAX_DATA_LEN                128
 #define PARAM_SIZE                          UART_RX_MAX_DATA_LEN - 3
@@ -25,6 +26,8 @@
 #define CMD_SL  (((uint16_t)'S'<<8)|'L') //Sleep to low power mode, console is disabled.
 #define CMD_UD  (((uint16_t)'U'<<8)|'D') //Set UUID normal
 #define CMD_UL  (((uint16_t)'U'<<8)|'L') //Set UUID low battery
+#define CMD_UV  (((uint16_t)'U'<<8)|'V') //Set UUID battery voltage
+#define CMD_ID  (((uint16_t)'I'<<8)|'D') //Set beacon id
 
 static uint8_t cmd_buffer[UART_RX_MAX_DATA_LEN];
 static int8_t  index = 0;
@@ -121,6 +124,7 @@ void console_process(void)
     uint64_t tmp_64;
     sysTime_t current;
     char* p;
+    int32_t vcc_voltage;
     config_t* config = get_config();
 
     len = strlen((char*)cmd_buffer);
@@ -166,8 +170,8 @@ void console_process(void)
                         SD_VERSION_GET(MBR_SIZE));
                 break;
             case CMD_RV: //Read VCC
-                //adc_user_get_vcc(&vcc_voltage);
-                //printf("VCC:%dmV\r\n", vcc_voltage);
+                adc_user_get_vcc(&vcc_voltage);
+                printf("VCC:%ldmV\r\n", vcc_voltage);
                 break;
             case CMD_SN: //Write and Read DEVICE ID
                 if (paramlen == 12)
@@ -240,6 +244,37 @@ void console_process(void)
                 else if (paramlen == 0)
                 {
                     printf("%s\r\n", get_date_time());
+                }
+                else
+                {
+                    printf("ERROR -1\r\n");
+                }
+                break;
+            case CMD_ID: //Write and Read ID
+                if (paramlen > 1)
+                {
+                    parameter[7] = 0;
+                    tmp_64 = strtoull((char*)parameter, &p, 10);
+
+                    if (tmp_64 > 0xFFFFF)
+                    {
+                        printf("ERROR -5\r\n");
+                        break;
+                    }
+
+                    get_config()->beacon_id = tmp_64;
+                    if (NRF_SUCCESS == store_config(get_config()))
+                    {
+                        printf("OK\r\n");
+                    }
+                    else
+                    {
+                        printf("ERROR -2\r\n");
+                    }
+                }
+                else if (paramlen == 0)
+                {
+                    printf("%ld\r\n", get_config()->beacon_id);
                 }
                 else
                 {
@@ -342,6 +377,37 @@ void console_process(void)
                     for (i = 0; i < UUID_LEN; i++)
                     {
                         printf("%02X", get_config()->uuid_low_battery[i]);
+                    }
+                    printf("\r\n");
+                }
+                break;
+            case CMD_UV:
+                if(paramlen == UUID_STR_LEN)
+                {
+                    static char uuid_str[UUID_STR_LEN+1];
+                    memcpy(uuid_str, parameter, UUID_STR_LEN);
+                    uuid_str[UUID_STR_LEN] = 0;
+                    parse_uuid_data(uuid_str, get_config()->uuid_voltage);
+                    if (NRF_SUCCESS == store_config(get_config()))
+                    {
+                        //flag_beacon_mm_update_request = true;
+                        printf("OK\r\n");
+                    }
+                    else
+                    {
+                        printf("ERROR-5\r\n");
+                    }
+                }
+                else if(paramlen != 0)
+                {
+                    printf("ERROR-1\r\n");
+                }
+                else
+                {
+                    printf("UUID_BATTERY_VOLTAGE: ");
+                    for (i = 0; i < UUID_LEN; i++)
+                    {
+                        printf("%02X", get_config()->uuid_voltage[i]);
                     }
                     printf("\r\n");
                 }
