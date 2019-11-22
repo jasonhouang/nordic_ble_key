@@ -1,7 +1,9 @@
+#include <stdio.h>
 #include <stdlib.h>
 #include "nrf.h"
 #include "nrf_log.h"
 #include "nrf_error.h"
+#include "nrf_soc.h"
 #include "common.h"
 
 static key_state_t key_state;
@@ -114,11 +116,61 @@ config_t * get_config(void)
     return &config;
 }
 
-ret_code_t store_config(const config_t *config)
+static uint32_t check_sum_32(uint32_t * data, uint32_t words)
 {
-    NRF_LOG_INFO("save_config_to_flash");
+    uint32_t sum = 0, i;
 
-    return NRF_SUCCESS;
+    for (i = 0; i < words; i++)
+    {
+        sum += data[i];
+    }
+
+    return sum;
+}
+
+ret_code_t store_config(config_t *config)
+{
+    uint32_t err_code = NRF_ERROR_INTERNAL, event_num;
+    config_t read_config;
+
+    config->len = sizeof(config_t);
+    config->check_key = MAGIC_KEY;
+    config->check_sum = check_sum_32((uint32_t *)config + 1, (sizeof(config_t) >> 2)  - 1);
+
+    do {
+        err_code = sd_flash_page_erase(FLASH_START_CONFIG / FLASH_NVM_PAGES_SIZE);
+    } while (err_code == NRF_ERROR_BUSY);
+
+    if (err_code == NRF_SUCCESS)
+    {
+        do {
+            err_code = sd_flash_write((uint32_t *)FLASH_START_CONFIG, (uint32_t *)config, sizeof(config_t) >> 2);
+        } while (err_code == NRF_ERROR_BUSY);
+    }
+
+    return err_code;
+}
+
+
+bool load_config_from_flash(void)
+{
+    config_t * p_config_flash = (config_t *)FLASH_START_CONFIG;
+    uint32_t * p_flash = (uint32_t *)FLASH_START_CONFIG;
+
+    if (p_config_flash->check_key == MAGIC_KEY)
+    {
+        if (p_config_flash->len <= FLASH_NVM_PAGES_SIZE)
+        {
+            uint32_t flash_checksum = check_sum_32((uint32_t *)p_flash + 1, (p_config_flash->len >> 2) - 1);
+            if (p_config_flash->check_sum == flash_checksum)
+            {
+                memcpy(&config, p_flash, p_config_flash->len);
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 bool parse_uuid_data(const char* uuidHexstr, uint8_t* out_sdata)

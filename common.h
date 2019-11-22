@@ -24,6 +24,9 @@
 
 #define SCAN_MAGIC_NUM                                      0xDEADBEEF
 
+#define FLASH_START_CONFIG                                  (0x0002E000)
+#define FLASH_NVM_PAGES_SIZE                                (0x1000)
+
 typedef struct _key_state_t
 {
     bool is_low_power;
@@ -75,12 +78,14 @@ void set_lock_state_changed(void);
 void clear_lock_state_changed(void);
 
 config_t* get_config(void);
-ret_code_t store_config(const config_t *config);
+bool load_config_from_flash(void);
+ret_code_t store_config(config_t *config);
 bool parse_uuid_data(const char* uuidHexstr, uint8_t* out_sdata);
 bool parse_seed_data(const char* seed32Hexstr, uint8_t* out_sdata);
 void hex2str(const uint8_t* hex,uint16_t hex_len, uint8_t* str);
 
 void wdt_feed(void);
+void update_key_para(void);
 #if 0
 #ifdef _GCC_WRAP_STDINT_H
 #undef _GCC_WRAP_STDINT_H

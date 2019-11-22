@@ -5,6 +5,7 @@
 #include "nrf_mbr.h"
 #include "app_uart.h"
 #include "nrf_log.h"
+#include "app_scheduler.h"
 #include "console.h"
 #include "common.h"
 #include "sys_time.h"
@@ -116,8 +117,11 @@ static void outputDeviceInfo(void)
     printf("MCU:%s,VAR:%s,PAK:%s,ROM:%s,RAM:%s\r\n",deviceName, Variant, packageName, flashInfo, ramInfo);
 }
 
-void console_process(void)
+static void console_process(void * p_event_data, uint16_t event_size)
 {
+    UNUSED_PARAMETER(p_event_data);
+    UNUSED_PARAMETER(event_size);
+
     uint8_t len, paramlen = 0;
     uint16_t cmdCode;
     uint64_t i;
@@ -195,7 +199,7 @@ void console_process(void)
                         if (NRF_SUCCESS == store_config(config))
                         {
                             printf("OK\r\n");
-                    //        flag_mac_base_update_request = true;
+                            update_key_para();
                         }
                         else
                         {
@@ -294,6 +298,7 @@ void console_process(void)
                             //flag_mac_base_update_request = true;
                             //flag_beacon_mm_update_request = true;
                             printf("OK\r\n");
+                            update_key_para();
                         }
                         else
                         {
@@ -330,6 +335,7 @@ void console_process(void)
                     {
                         //flag_beacon_mm_update_request = true;
                         printf("OK\r\n");
+                        update_key_para();
                     }
                     else
                     {
@@ -361,6 +367,7 @@ void console_process(void)
                     {
                         //flag_beacon_mm_update_request = true;
                         printf("OK\r\n");
+                        update_key_para();
                     }
                     else
                     {
@@ -392,6 +399,7 @@ void console_process(void)
                     {
                         //flag_beacon_mm_update_request = true;
                         printf("OK\r\n");
+                        update_key_para();
                     }
                     else
                     {
@@ -447,7 +455,9 @@ void uart_event_handle(app_uart_evt_t * p_event)
 
                 NRF_LOG_HEXDUMP_INFO(cmd_buffer, index - 1);
 
-                console_process();
+                err_code = app_sched_event_put(NULL, 0, console_process);
+                APP_ERROR_CHECK(err_code);
+
                 index = 0;
             }
             break;

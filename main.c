@@ -983,37 +983,69 @@ static void update_advertising_voltage(void)
 
 #if 1
 
-const static uint8_t pcb_id[] = {0xA7, 0x2D, 0xFF, 0x8C, 0x96, 0x72};
+const static uint8_t pcb_id[] = {0xA7, 0x2D, 0xFF, 0x8C, 0x96, 0x72}; // A72DFF8C9672
 const static uint8_t key_seed[] = "13989DDD23516A7147DFF970F020684F0A5ECFC44D261123E1E64EC706578E7E";
 //const static uint8_t pcb_id[] = {0x5a, 0xcf, 0x30, 0x2c, 0x34, 0x0d};
 //const static uint8_t key_seed[] = "4C736A750EAFA28F6530532CB3561A4C56B2FE1B26397E1C668A25276FE8EB5A";
 
+static void load_default_para(void)
+{
+    memcpy(get_config()->device_id, pcb_id, 6);
+
+    if (!parse_seed_data((const char *)key_seed, get_config()->seed_data))
+    {
+        printf("parse_seed_data error\r\n");
+    }
+
+    uint8_t key_beacon_uuid[16] = {KEY_BEACON_UUID};
+    memcpy(get_config()->uuid_normal, key_beacon_uuid, 16);
+
+    uint8_t bat_beacon_uuid[16] = {BAT_BEACON_UUID};
+    memcpy(get_config()->uuid_low_battery, bat_beacon_uuid, 16);
+
+    uint8_t vol_beacon_uuid[16] = {VOL_BEACON_UUID};
+    memcpy(get_config()->uuid_voltage, vol_beacon_uuid, 16);
+}
+
+void update_key_para(void)
+{
+    ibeacon_t * p_ibeacon = (ibeacon_t *)m_beacon_info;
+    memcpy(p_ibeacon->uuid, get_config()->uuid_normal, UUID_LEN);
+
+    p_ibeacon = (ibeacon_t *)m_beacon_bat;
+    memcpy(p_ibeacon->uuid, get_config()->uuid_low_battery, UUID_LEN);
+
+    p_ibeacon = (ibeacon_t *)m_beacon_vol;
+    memcpy(p_ibeacon->uuid, get_config()->uuid_voltage, UUID_LEN);
+
+    uint32_t pcb_id_crc = crc32_compute((uint8_t*)get_config()->device_id, 6, NULL);
+    uint32_t key_crc = crc32_compute((uint8_t*)get_config()->seed_data, 32, &pcb_id_crc);
+
+    get_config()->crc24 = key_crc & 0x00FFFFFF;
+    //printf("crc24 = 0x%lx\r\n", get_config()->crc24);
+
+    uint8_t crc24[3];
+    crc24[0] = (uint8_t) ((get_config()->crc24 & 0x00FF0000) >> 16);
+    crc24[1] = (uint8_t) ((get_config()->crc24 & 0x0000FF00) >> 8);
+    crc24[2] = (uint8_t) ((get_config()->crc24 & 0x000000FF) >> 0);
+
+    hex2str((const uint8_t *)crc24, 3, key_crc24);
+    key_crc24[6] = '\0';
+
+    //printf("key_crc24 = %s\r\n", key_crc24);
+}
 
 static void key_init(void)
 {
     key_state_init();
 
-    memcpy(get_config()->device_id, pcb_id, 6);
-    if (!parse_seed_data((const char *)key_seed, get_config()->seed_data))
+    if (!load_config_from_flash())
     {
-        printf("parse_seed_data error\r\n");
+        printf("load config failed, use default\r\n");
+        load_default_para();
     }
-    uint8_t key_beacon_uuid[16] = {KEY_BEACON_UUID};
-    memcpy(get_config()->uuid_normal, key_beacon_uuid, 16);
-    uint8_t bat_beacon_uuid[16] = {BAT_BEACON_UUID};
-    memcpy(get_config()->uuid_low_battery, bat_beacon_uuid, 16);
 
-    uint32_t pcb_id_crc = crc32_compute((uint8_t*)get_config()->device_id, 6, NULL);
-    uint32_t key_crc = crc32_compute((uint8_t*)get_config()->seed_data, 32, &pcb_id_crc);
-    get_config()->crc24 = key_crc & 0x00FFFFFF;
-    printf("crc24 = 0x%lx\r\n", get_config()->crc24);
-    uint8_t crc24[3];
-    crc24[0] = (uint8_t) ((get_config()->crc24 & 0x00FF0000) >> 16);
-    crc24[1] = (uint8_t) ((get_config()->crc24 & 0x0000FF00) >> 8);
-    crc24[2] = (uint8_t) ((get_config()->crc24 & 0x000000FF) >> 0);
-    hex2str((const uint8_t *)crc24, 3, key_crc24);
-    key_crc24[6] = '\0';
-    printf("key_crc24 = %s\r\n", key_crc24);
+    update_key_para();
 }
 
 static uint8_t sum_check_gen(uint8_t mac4)
@@ -1068,7 +1100,7 @@ static void scheduler_scan_trigger(void * p_event_data, uint16_t event_size)
     mac_set[3] = (uint8_t)(get_config()->crc24 >> 8);
     mac_set[4] = (uint8_t)(get_config()->crc24 >> 16);
 
-    printf("m_scan_count = %d\r\n", get_scan_count()->m_scan_count);
+    //printf("m_scan_count = %d\r\n", get_scan_count()->m_scan_count);
     if (ctl_cmd.cmd == OPEN_LOCK)
     {
         mac_set[1] = 0x01 | (get_scan_count()->m_scan_count << 1);
