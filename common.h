@@ -37,6 +37,8 @@ typedef struct _key_state_t
     bool is_scan_open;
     bool is_scan_close;
     bool is_lock_state_changed;
+    bool is_flashed_success;
+    bool is_flashed_failed;
 } key_state_t;
 
 typedef struct _config_t
@@ -76,6 +78,9 @@ void set_key_state_scan_close(void);
 void clear_key_state_scan_close(void);
 void set_lock_state_changed(void);
 void clear_lock_state_changed(void);
+void set_key_state_flashed_success(void);
+void clear_key_state_flashed_success(void);
+void set_key_state_flashed_failed(void);
 
 config_t* get_config(void);
 bool load_config_from_flash(void);

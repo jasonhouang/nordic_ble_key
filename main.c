@@ -72,6 +72,8 @@
 #define NUS_SERVICE_UUID_TYPE           BLE_UUID_TYPE_VENDOR_BEGIN                  /**< UUID type for the Nordic UART Service (vendor specific). */
 
 #define APP_BLE_OBSERVER_PRIO           3                                           /**< Application's BLE observer priority. You shouldn't need to modify this value. */
+#define APP_SOC_OBSERVER_PRIO           1                                           /**< Applications' SoC observer priority. You shoulnd't need to modify this value. */
+
 
 #define APP_ADV_INTERVAL                64                                          /**< The advertising interval (in units of 0.625 ms. This value corresponds to 40 ms). */
 #define APP_ADV_TIMEOUT_IN_SECONDS      0                                         /**< The advertising timeout (in units of seconds). */
@@ -644,6 +646,30 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context)
     }
 }
 
+/**@brief SoftDevice SoC event handler.
+ *
+ * @param[in]   evt_id      SoC event.
+ * @param[in]   p_context   Context.
+ */
+static void soc_evt_handler(uint32_t evt_id, void * p_context)
+{
+    switch (evt_id)
+    {
+        case NRF_EVT_FLASH_OPERATION_SUCCESS:
+            set_key_state_flashed_success();
+            //printf("NRF_EVT_FLASH_OPERATION_SUCCESS\r\n");
+            break;
+        case NRF_EVT_FLASH_OPERATION_ERROR:
+            set_key_state_flashed_failed();
+            //printf("NRF_EVT_FLASH_OPERATION_ERROR\r\n");
+            break;
+
+        default:
+            // No implementation needed.
+            break;
+    }
+}
+
 
 /**@brief Function for the SoftDevice initialization.
  *
@@ -668,6 +694,7 @@ static void ble_stack_init(void)
 
     // Register a handler for BLE events.
     NRF_SDH_BLE_OBSERVER(m_ble_observer, APP_BLE_OBSERVER_PRIO, ble_evt_handler, NULL);
+    NRF_SDH_SOC_OBSERVER(m_soc_observer, APP_SOC_OBSERVER_PRIO, soc_evt_handler, NULL);
 }
 
 
