@@ -9,7 +9,7 @@
 static key_state_t key_state;
 static config_t config __attribute__((aligned));
 
-NRF_SECTION_ITEM_REGISTER(scan_count_section, static scan_count_t scan_count) = {0, SCAN_MAGIC_NUM};
+NRF_SECTION_ITEM_REGISTER(retained_section, static scan_count_t scan_count) = {0, SCAN_MAGIC_NUM};
 
 void key_state_init(void)
 {
