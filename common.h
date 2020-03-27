@@ -24,12 +24,12 @@
 
 #define SCAN_MAGIC_NUM                                      0xDEADBEEF
 
-#define FLASH_START_CONFIG                                  (0x0002E000)
+#define FLASH_START_CONFIG                                  (0x0002F000)
 #define FLASH_NVM_PAGES_SIZE                                (0x1000)
 
 #define FACTORY_INFO_START_ADDR                             FLASH_START_CONFIG
-#define FACTORY_INFO_PAGES_SIZE                             FLASH_NVM_PAGES_SIZE
-#define PCBA_TEST_FW_START_ADDR                             (FLASH_START_CONFIG + FLASH_NVM_PAGES_SIZE - 1)
+#define FACTORY_INFO_PAGES_SIZE                             1
+#define FACTORY_INFO_END_ADDR                               (FLASH_START_CONFIG + FLASH_NVM_PAGES_SIZE - 1)
 
 #define SEED_DEFAULT                                        "13989DDD23516A7147DFF970F020684F0A5ECFC44D261123E1E64EC706578E7E"
 
@@ -43,8 +43,6 @@ typedef struct _key_state_t
     bool is_scan_open;
     bool is_scan_close;
     bool is_lock_state_changed;
-    bool is_flashed_success;
-    bool is_flashed_failed;
 } key_state_t;
 
 typedef struct _config_t
@@ -85,9 +83,6 @@ void set_key_state_scan_close(void);
 void clear_key_state_scan_close(void);
 void set_lock_state_changed(void);
 void clear_lock_state_changed(void);
-void set_key_state_flashed_success(void);
-void clear_key_state_flashed_success(void);
-void set_key_state_flashed_failed(void);
 
 config_t* get_config(void);
 bool parse_uuid_data(const char* uuidHexstr, uint8_t* out_sdata);

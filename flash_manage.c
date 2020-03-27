@@ -20,7 +20,7 @@ NRF_FSTORAGE_DEF(nrf_fstorage_t fstorage) =
 {
     .evt_handler = fstorage_evt_handler,
     .start_addr = FACTORY_INFO_START_ADDR,
-    .end_addr   = PCBA_TEST_FW_START_ADDR - 1,
+    .end_addr   = FACTORY_INFO_END_ADDR,
 };
 
 const uint8_t* get_seed(void)
@@ -61,8 +61,6 @@ ret_code_t store_config(config_t *config)
     config->len = sizeof(config_t);
     config->check_key = MAGIC_KEY;
     config->check_sum = crc32_compute((uint8_t const *)config + sizeof(uint32_t), sizeof(config_t) - sizeof(uint32_t), NULL);
-
-    clear_key_state_flashed_success();
 
     rc = nrf_fstorage_erase(&fstorage, FACTORY_INFO_START_ADDR, FACTORY_INFO_PAGES_SIZE, NULL);
     APP_ERROR_CHECK(rc);

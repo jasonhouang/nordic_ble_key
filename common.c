@@ -27,8 +27,6 @@ void key_state_init(void)
     key_state.is_scan_open = false;
     key_state.is_scan_close = false;
     key_state.is_lock_state_changed = false;
-    key_state.is_flashed_success = false;
-    key_state.is_flashed_failed = false;
 }
 
 scan_count_t * get_scan_count(void)
@@ -111,26 +109,6 @@ void set_lock_state_changed(void)
 void clear_lock_state_changed(void)
 {
     key_state.is_lock_state_changed = false;
-}
-
-void set_key_state_flashed_success(void)
-{
-    key_state.is_flashed_success = true;
-}
-
-void clear_key_state_flashed_success(void)
-{
-    key_state.is_flashed_success = false;
-}
-
-void set_key_state_flashed_failed(void)
-{
-    key_state.is_flashed_failed = true;
-}
-
-void clear_key_state_flashed_failed(void)
-{
-    key_state.is_flashed_failed = false;
 }
 
 config_t * get_config(void)
