@@ -91,6 +91,7 @@ void hex2str(const uint8_t* hex,uint16_t hex_len, uint8_t* str);
 
 void wdt_feed(void);
 void update_key_para(void);
+void shut_down_feed(void);
 #if 0
 #ifdef _GCC_WRAP_STDINT_H
 #undef _GCC_WRAP_STDINT_H

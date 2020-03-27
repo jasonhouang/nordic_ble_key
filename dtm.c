@@ -3,9 +3,33 @@
 #include "nrf.h"
 #include "ble_dtm.h"
 #include "app_uart.h"
+#include "app_timer.h"
 #include "common.h"
+#include "nrf_log.h"
 
 #define MAX_ITERATIONS_NEEDED_FOR_NEXT_BYTE ((5000 + 2 * UART_POLL_CYCLE) / UART_POLL_CYCLE)
+
+APP_TIMER_DEF(m_timer_dtm);
+
+volatile bool is_msb_read = false; // True when MSB of the DTM command has been read and the application is waiting for LSB.
+volatile uint16_t dtm_cmd_from_uart = 0; // Packed command containing command_code:freqency:length:payload in 2:6:6:2 bits.
+bool is_dtm_mode_inited = false;
+
+void dtm_timer_start(void)
+{
+    app_timer_start(m_timer_dtm, APP_TIMER_TICKS(5), NULL);
+}
+
+void dtm_timer_stop(void)
+{
+    app_timer_stop(m_timer_dtm);
+}
+
+static void app_timer_dtm_handle(void * p_context)
+{
+    is_msb_read = false;
+    NRF_LOG_INFO("app_timer_dtm_handle");
+}
 
 /**@brief Function for splitting UART command bit fields into separate command parameters for the DTM library.
  *
@@ -41,6 +65,8 @@ int dtm_main(void)
 
     printf("enter dtm mode\r\n");
     wdt_feed();
+    app_timer_create(&m_timer_dtm, APP_TIMER_MODE_SINGLE_SHOT, app_timer_dtm_handle);
+
     dtm_error_code = dtm_init();           // Need to change default default timer0 in sdk
     if (dtm_error_code != DTM_SUCCESS)
     {
@@ -50,6 +76,8 @@ int dtm_main(void)
     }
     printf("dtm init success\r\n");
 
+    is_dtm_mode_inited = true;
+
     for (;;)
     {
         wdt_feed();
@@ -57,37 +85,11 @@ int dtm_main(void)
         current_time = dtm_wait();
 
         (void)current_time;
-        if (app_uart_get(&rx_byte) != NRF_SUCCESS)
-        {
-            // Nothing read from the UART.
-            continue;
-        }
 
         if (!is_msb_read)
         {
-            // This is first byte of two-byte command.
-            is_msb_read       = true;
-            dtm_cmd_from_uart = ((dtm_cmd_t)rx_byte) << 8;
-            msb_time          = current_time;
-
-            // Go back and wait for 2nd byte of command word.
             continue;
         }
-
-        // This is the second byte read; combine it with the first and process command
-        if (current_time > (msb_time + MAX_ITERATIONS_NEEDED_FOR_NEXT_BYTE))
-        {
-            // More than ~5mS after msb: Drop old byte, take the new byte as MSB.
-            // The variable is_msb_read will remains true.
-            // Go back and wait for 2nd byte of the command word.
-            dtm_cmd_from_uart = ((dtm_cmd_t)rx_byte) << 8;
-            msb_time          = current_time;
-            continue;
-        }
-
-        // 2-byte UART command received.
-        is_msb_read        = false;
-        dtm_cmd_from_uart |= (dtm_cmd_t)rx_byte;
 
         if (dtm_cmd_put(dtm_cmd_from_uart) != DTM_SUCCESS)
         {
@@ -105,7 +107,10 @@ int dtm_main(void)
             while (app_uart_put((result >> 8) & 0xFF));
             // Transmit LSB of the result.
             while (app_uart_put(result & 0xFF));
+            NRF_LOG_INFO("result = 0x%x", result);
         }
+
+        is_msb_read = false;
     }
 }
 

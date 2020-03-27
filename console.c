@@ -11,6 +11,7 @@
 #include "sys_time.h"
 #include "adc_user.h"
 #include "flash_manage.h"
+#include "dtm.h"
 
 #define UART_RX_MAX_DATA_LEN                128
 #define PARAM_SIZE                          UART_RX_MAX_DATA_LEN - 3
@@ -133,207 +134,182 @@ static void console_process(void * p_event_data, uint16_t event_size)
     config_t* config = get_config();
 
     len = strlen((char*)cmd_buffer);
-    if (len >= 3)
+    if (len < 3)
     {
-        if (cmd_buffer[0] == '$')
+        printf("Unkown Command.\r\n");
+        goto exit;
+    }
+
+    shut_down_feed();
+
+    if (cmd_buffer[0] == '$')
+    {
+        if(len > 3)
         {
-            if(len > 3)
+            paramlen = len - 3 > PARAM_SIZE ? PARAM_SIZE : len - 3;
+            memcpy(parameter, (char*)cmd_buffer + 3, paramlen);
+            parameter[paramlen] = 0;
+        }
+        else
+        {
+            paramlen = 0;
+        }
+    }
+    else
+    {
+        printf("Unkown Command.\r\n");
+        goto exit;
+    }
+
+    cmdCode = cmd_buffer[1];
+    cmdCode <<= 8;
+    cmdCode |= cmd_buffer[2];
+    //Command rounting
+    switch(cmdCode)
+    {
+        case CMD_NN://Loop back command
+            printf("OK\r\n");
+            break;
+        case CMD_DT: //into DTM Mode (for RF teset)
+            //com_port_function_set(COM_PORT_DTM);
+            set_key_state_dtm_mode();
+            printf("OK\r\n");
+            break;
+        case CMD_RR: //Launch a software reset
+            sd_nvic_SystemReset();
+            break;
+        case CMD_HI: //Get MCU informations
+            outputDeviceInfo();
+            printf("UID:%08lX%08lX\r\n",NRF_FICR->DEVICEID[1],NRF_FICR->DEVICEID[0]);
+            break;
+        case CMD_SI: //Get firmware informations
+            printf("Firmware Ver:%d.%d,Re:%s \r\n", VERSION, REVISON, __DATE__);
+            printf("SoftDevice FWID:%d,ID:%ld,Ver:%ld\r\n",SD_FWID_GET(MBR_SIZE),SD_ID_GET(MBR_SIZE),
+                    SD_VERSION_GET(MBR_SIZE));
+            break;
+        case CMD_RV: //Read VCC
+            adc_user_get_vcc(&vcc_voltage);
+            printf("VCC:%ldmV\r\n", vcc_voltage);
+            break;
+        case CMD_SN: //Write and Read DEVICE ID
+            if (paramlen == 12)
             {
-                paramlen = len - 3 > PARAM_SIZE ? PARAM_SIZE : len - 3;
-                memcpy(parameter, (char*)cmd_buffer + 3, paramlen);
-                parameter[paramlen] = 0;
+                parameter[12] = 0;//give string end
+                i = strtoull(parameter, &p, 16);
+                if (i == 0)
+                {
+                    //Parameter error (not a nummber or zero).
+                    printf("ERROR-3\r\n");
+                }
+                else
+                {
+                    config->device_id[0] = i>>40;
+                    config->device_id[1] = i>>32;
+                    config->device_id[2] = i>>24;
+                    config->device_id[3] = i>>16;
+                    config->device_id[4] = i>>8;
+                    config->device_id[5] = i>>0;
+
+                    if (NRF_SUCCESS == store_config(config))
+                    {
+                        printf("OK\r\n");
+                        update_key_para();
+                    }
+                    else
+                    {
+                        printf("ERROR-5\r\n");
+                    }
+                }
+            }
+            else if (paramlen != 0)
+            {
+                //Parameter length error.
+                printf("ERROR-1\r\n");
             }
             else
             {
-                paramlen = 0;
+                printf("PCB_ID: %02X%02X%02X%02X%02X%02X\r\n", config->device_id[0],\
+                        config->device_id[1],\
+                        config->device_id[2],\
+                        config->device_id[3],\
+                        config->device_id[4],\
+                        config->device_id[5]);
             }
-        }
-        cmdCode = cmd_buffer[1];
-        cmdCode <<= 8;
-        cmdCode |= cmd_buffer[2];
-        //Command rounting
-        switch(cmdCode)
-        {
-            case CMD_NN://Loop back command
-                printf("OK\r\n");
-                break;
-            case CMD_DT: //into DTM Mode (for RF teset)
-                //com_port_function_set(COM_PORT_DTM);
-                set_key_state_dtm_mode();
-                printf("OK\r\n");
-                break;
-            case CMD_RR: //Launch a software reset
-                sd_nvic_SystemReset();
-                break;
-            case CMD_HI: //Get MCU informations
-                outputDeviceInfo();
-                printf("UID:%08lX%08lX\r\n",NRF_FICR->DEVICEID[1],NRF_FICR->DEVICEID[0]);
-                break;
-            case CMD_SI: //Get firmware informations
-                printf("Firmware Ver:%d.%d,Re:%s \r\n", VERSION, REVISON, __DATE__);
-                printf("SoftDevice FWID:%d,ID:%ld,Ver:%ld\r\n",SD_FWID_GET(MBR_SIZE),SD_ID_GET(MBR_SIZE),
-                        SD_VERSION_GET(MBR_SIZE));
-                break;
-            case CMD_RV: //Read VCC
-                adc_user_get_vcc(&vcc_voltage);
-                printf("VCC:%ldmV\r\n", vcc_voltage);
-                break;
-            case CMD_SN: //Write and Read DEVICE ID
-                if (paramlen == 12)
-                {
-                    parameter[12] = 0;//give string end
-                    i = strtoull(parameter, &p, 16);
-                    if (i == 0)
-                    {
-                        //Parameter error (not a nummber or zero).
-                        printf("ERROR-3\r\n");
-                    }
-                    else
-                    {
-                        config->device_id[0] = i>>40;
-                        config->device_id[1] = i>>32;
-                        config->device_id[2] = i>>24;
-                        config->device_id[3] = i>>16;
-                        config->device_id[4] = i>>8;
-                        config->device_id[5] = i>>0;
+            break;
+        case CMD_DA: //Write and Read Date
+            if (paramlen == 14)
+            {
+                parameter[14] = 0;
+                tmp_64 = strtoull((char*)parameter, &p, 10);
 
-                        if (NRF_SUCCESS == store_config(config))
-                        {
-                            printf("OK\r\n");
-                            update_key_para();
-                        }
-                        else
-                        {
-                            printf("ERROR-5\r\n");
-                        }
-                    }
-                }
-                else if (paramlen != 0)
+                current.year    = tmp_64/10000000000;
+                current.month   = tmp_64%10000000000/100000000;
+                current.day     = tmp_64%100000000/1000000;
+                current.hour    = tmp_64%1000000/10000;
+                current.min     = tmp_64%10000/100;
+                current.sec     = tmp_64%100;
+
+                uint32_t sum_sec = date_to_sec(current);
+                if (sync_time_by_sec(sum_sec))
                 {
-                    //Parameter length error.
-                    printf("ERROR-1\r\n");
+                    printf("OK\r\n");
                 }
                 else
                 {
-                    printf("PCB_ID: %02X%02X%02X%02X%02X%02X\r\n", config->device_id[0],\
-                            config->device_id[1],\
-                            config->device_id[2],\
-                            config->device_id[3],\
-                            config->device_id[4],\
-                            config->device_id[5]);
+                    printf("ERROR -2\r\n");
                 }
-                break;
-            case CMD_DA: //Write and Read Date
-                if (paramlen == 14)
+            }
+            else if (paramlen == 0)
+            {
+                printf("%s\r\n", get_date_time());
+            }
+            else
+            {
+                printf("ERROR -1\r\n");
+            }
+            break;
+        case CMD_ID: //Write and Read ID
+            if (paramlen > 1)
+            {
+                parameter[7] = 0;
+                tmp_64 = strtoull((char*)parameter, &p, 10);
+
+                if (tmp_64 > 0xFFFFF)
                 {
-                    parameter[14] = 0;
-                    tmp_64 = strtoull((char*)parameter, &p, 10);
-
-                    current.year    = tmp_64/10000000000;
-                    current.month   = tmp_64%10000000000/100000000;
-                    current.day     = tmp_64%100000000/1000000;
-                    current.hour    = tmp_64%1000000/10000;
-                    current.min     = tmp_64%10000/100;
-                    current.sec     = tmp_64%100;
-
-                    uint32_t sum_sec = date_to_sec(current);
-                    if (sync_time_by_sec(sum_sec))
-                    {
-                        printf("OK\r\n");
-                    }
-                    else
-                    {
-                        printf("ERROR -2\r\n");
-                    }
+                    printf("ERROR -5\r\n");
+                    break;
                 }
-                else if (paramlen == 0)
+
+                get_config()->beacon_id = tmp_64;
+                if (NRF_SUCCESS == store_config(get_config()))
                 {
-                    printf("%s\r\n", get_date_time());
+                    printf("OK\r\n");
                 }
                 else
                 {
-                    printf("ERROR -1\r\n");
+                    printf("ERROR -2\r\n");
                 }
-                break;
-            case CMD_ID: //Write and Read ID
-                if (paramlen > 1)
+            }
+            else if (paramlen == 0)
+            {
+                printf("%ld\r\n", get_config()->beacon_id);
+            }
+            else
+            {
+                printf("ERROR -1\r\n");
+            }
+            break;
+        case CMD_ED://Write and Read Beacon Seed
+            if (paramlen == SEED_STR_LEN)
+            {
+                char seed_str[SEED_STR_LEN+1];
+                memcpy(seed_str, parameter, SEED_STR_LEN);
+                seed_str[SEED_STR_LEN] = 0;
+                if (parse_seed_data(seed_str, get_config()->seed_data))
                 {
-                    parameter[7] = 0;
-                    tmp_64 = strtoull((char*)parameter, &p, 10);
-
-                    if (tmp_64 > 0xFFFFF)
-                    {
-                        printf("ERROR -5\r\n");
-                        break;
-                    }
-
-                    get_config()->beacon_id = tmp_64;
                     if (NRF_SUCCESS == store_config(get_config()))
                     {
-                        printf("OK\r\n");
-                    }
-                    else
-                    {
-                        printf("ERROR -2\r\n");
-                    }
-                }
-                else if (paramlen == 0)
-                {
-                    printf("%ld\r\n", get_config()->beacon_id);
-                }
-                else
-                {
-                    printf("ERROR -1\r\n");
-                }
-                break;
-            case CMD_ED://Write and Read Beacon Seed
-                if (paramlen == SEED_STR_LEN)
-                {
-                    char seed_str[SEED_STR_LEN+1];
-                    memcpy(seed_str, parameter, SEED_STR_LEN);
-                    seed_str[SEED_STR_LEN] = 0;
-                    if (parse_seed_data(seed_str, get_config()->seed_data))
-                    {
-                        if (NRF_SUCCESS == store_config(get_config()))
-                        {
-                            //flag_mac_base_update_request = true;
-                            //flag_beacon_mm_update_request = true;
-                            printf("OK\r\n");
-                            update_key_para();
-                        }
-                        else
-                        {
-                            printf("ERROR-5\r\n");
-                        }
-                    }
-                    else
-                    {
-                        printf("ERROR-6\r\n");
-                    }
-                }
-                else if (paramlen != 0)
-                {
-                    printf("ERROR-1\r\n");
-                }
-                else
-                {
-                    printf("SEED: ");
-                    for (i = 0; i < SEED_LEN; i++)
-                    {
-                        printf("%02X", get_config()->seed_data[i]);
-                    }
-                    printf("\r\n");
-                }
-                break;
-            case CMD_UD:
-                if (paramlen == UUID_STR_LEN)
-                {
-                    static char uuid_str[UUID_STR_LEN+1];
-                    memcpy(uuid_str, parameter, UUID_STR_LEN);
-                    uuid_str[UUID_STR_LEN] = 0;
-                    parse_uuid_data(uuid_str, get_config()->uuid_normal);
-                    if (NRF_SUCCESS == store_config(get_config()))
-                    {
+                        //flag_mac_base_update_request = true;
                         //flag_beacon_mm_update_request = true;
                         printf("OK\r\n");
                         update_key_para();
@@ -343,89 +319,127 @@ static void console_process(void * p_event_data, uint16_t event_size)
                         printf("ERROR-5\r\n");
                     }
                 }
-                else if (paramlen != 0)
+                else
                 {
-                    printf("ERROR-1\r\n");
+                    printf("ERROR-6\r\n");
+                }
+            }
+            else if (paramlen != 0)
+            {
+                printf("ERROR-1\r\n");
+            }
+            else
+            {
+                printf("SEED: ");
+                for (i = 0; i < SEED_LEN; i++)
+                {
+                    printf("%02X", get_config()->seed_data[i]);
+                }
+                printf("\r\n");
+            }
+            break;
+        case CMD_UD:
+            if (paramlen == UUID_STR_LEN)
+            {
+                static char uuid_str[UUID_STR_LEN+1];
+                memcpy(uuid_str, parameter, UUID_STR_LEN);
+                uuid_str[UUID_STR_LEN] = 0;
+                parse_uuid_data(uuid_str, get_config()->uuid_normal);
+                if (NRF_SUCCESS == store_config(get_config()))
+                {
+                    //flag_beacon_mm_update_request = true;
+                    printf("OK\r\n");
+                    update_key_para();
                 }
                 else
                 {
-                    printf("UUID_NORMAL: ");
-                    for (i = 0; i < UUID_LEN; i++)
-                    {
-                        printf("%02X", get_config()->uuid_normal[i]);
-                    }
-                    printf("\r\n");
+                    printf("ERROR-5\r\n");
                 }
-                break;
-            case CMD_UL:
-                if(paramlen == UUID_STR_LEN)
+            }
+            else if (paramlen != 0)
+            {
+                printf("ERROR-1\r\n");
+            }
+            else
+            {
+                printf("UUID_NORMAL: ");
+                for (i = 0; i < UUID_LEN; i++)
                 {
-                    static char uuid_str[UUID_STR_LEN+1];
-                    memcpy(uuid_str, parameter, UUID_STR_LEN);
-                    uuid_str[UUID_STR_LEN] = 0;
-                    parse_uuid_data(uuid_str, get_config()->uuid_low_battery);
-                    if (NRF_SUCCESS == store_config(get_config()))
-                    {
-                        //flag_beacon_mm_update_request = true;
-                        printf("OK\r\n");
-                        update_key_para();
-                    }
-                    else
-                    {
-                        printf("ERROR-5\r\n");
-                    }
+                    printf("%02X", get_config()->uuid_normal[i]);
                 }
-                else if(paramlen != 0)
+                printf("\r\n");
+            }
+            break;
+        case CMD_UL:
+            if(paramlen == UUID_STR_LEN)
+            {
+                static char uuid_str[UUID_STR_LEN+1];
+                memcpy(uuid_str, parameter, UUID_STR_LEN);
+                uuid_str[UUID_STR_LEN] = 0;
+                parse_uuid_data(uuid_str, get_config()->uuid_low_battery);
+                if (NRF_SUCCESS == store_config(get_config()))
                 {
-                    printf("ERROR-1\r\n");
+                    //flag_beacon_mm_update_request = true;
+                    printf("OK\r\n");
+                    update_key_para();
                 }
                 else
                 {
-                    printf("UUID_LOW_BATTERY: ");
-                    for (i = 0; i < UUID_LEN; i++)
-                    {
-                        printf("%02X", get_config()->uuid_low_battery[i]);
-                    }
-                    printf("\r\n");
+                    printf("ERROR-5\r\n");
                 }
-                break;
-            case CMD_UV:
-                if(paramlen == UUID_STR_LEN)
+            }
+            else if(paramlen != 0)
+            {
+                printf("ERROR-1\r\n");
+            }
+            else
+            {
+                printf("UUID_LOW_BATTERY: ");
+                for (i = 0; i < UUID_LEN; i++)
                 {
-                    static char uuid_str[UUID_STR_LEN+1];
-                    memcpy(uuid_str, parameter, UUID_STR_LEN);
-                    uuid_str[UUID_STR_LEN] = 0;
-                    parse_uuid_data(uuid_str, get_config()->uuid_voltage);
-                    if (NRF_SUCCESS == store_config(get_config()))
-                    {
-                        //flag_beacon_mm_update_request = true;
-                        printf("OK\r\n");
-                        update_key_para();
-                    }
-                    else
-                    {
-                        printf("ERROR-5\r\n");
-                    }
+                    printf("%02X", get_config()->uuid_low_battery[i]);
                 }
-                else if(paramlen != 0)
+                printf("\r\n");
+            }
+            break;
+        case CMD_UV:
+            if(paramlen == UUID_STR_LEN)
+            {
+                static char uuid_str[UUID_STR_LEN+1];
+                memcpy(uuid_str, parameter, UUID_STR_LEN);
+                uuid_str[UUID_STR_LEN] = 0;
+                parse_uuid_data(uuid_str, get_config()->uuid_voltage);
+                if (NRF_SUCCESS == store_config(get_config()))
                 {
-                    printf("ERROR-1\r\n");
+                    //flag_beacon_mm_update_request = true;
+                    printf("OK\r\n");
+                    update_key_para();
                 }
                 else
                 {
-                    printf("UUID_BATTERY_VOLTAGE: ");
-                    for (i = 0; i < UUID_LEN; i++)
-                    {
-                        printf("%02X", get_config()->uuid_voltage[i]);
-                    }
-                    printf("\r\n");
+                    printf("ERROR-5\r\n");
                 }
-                break;
-            default:
-                printf("Unkown Command.\r\n");
-                break;
-        }
+            }
+            else if(paramlen != 0)
+            {
+                printf("ERROR-1\r\n");
+            }
+            else
+            {
+                printf("UUID_BATTERY_VOLTAGE: ");
+                for (i = 0; i < UUID_LEN; i++)
+                {
+                    printf("%02X", get_config()->uuid_voltage[i]);
+                }
+                printf("\r\n");
+            }
+            break;
+        default:
+            printf("Unkown Command.\r\n");
+            break;
     }
+
+exit:
     memset(cmd_buffer, 0x0, UART_RX_MAX_DATA_LEN);
 }
 
@@ -436,11 +450,29 @@ void uart_event_handle(app_uart_evt_t * p_event)
     switch (p_event->evt_type)
     {
         case APP_UART_DATA_READY:
-            if (get_key_state()->is_dtm_mode)
-                return;
 
             UNUSED_VARIABLE(app_uart_get(&cmd_buffer[index]));
             index++;
+            if ((cmd_buffer[index - 1] == 0x08) && (index > 0))
+            {
+                index -= 2;
+            }
+
+            if (get_key_state()->is_dtm_mode && is_dtm_mode_inited)
+            {
+                if (index >= 2)
+                {
+                    NRF_LOG_HEXDUMP_INFO(cmd_buffer, index);
+                    dtm_cmd_from_uart = uint16_big_decode(&cmd_buffer[0]);
+                    is_msb_read = true;
+                    index = 0;
+                    //err_code = app_sched_event_put(NULL, 0, dtm_process);
+                    //APP_ERROR_CHECK(err_code);
+                    dtm_timer_stop();
+                    dtm_timer_start();
+                }
+                break;
+            }
 
             if ((cmd_buffer[index - 1] == 0x08) && (index > 0))
             {

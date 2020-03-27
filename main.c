@@ -133,7 +133,7 @@ static ble_gap_adv_params_t m_adv_params;                                 /**< P
 
 volatile bool m_scanner_started = false;
 volatile bool m_adv_started = false;
-static volatile uint16_t m_console_timeout = CONSOLE_TIMEOUT;
+volatile uint16_t m_console_timeout = CONSOLE_TIMEOUT;
 static uint32_t m_button_hold_timeout = BUTTON_HOLD_TIMEOUT;
 static uint32_t m_voltage_check_interval = VOLTAGE_CHECK_INTERVAL_NORMAL;
 static volatile uint32_t m_voltage_check_timeout = VOLTAGE_CHECK_INTERVAL_NORMAL;
@@ -1273,6 +1273,10 @@ static void check_battery(void)
     }
 }
 
+void shut_down_feed(void)
+{
+    m_console_timeout = CONSOLE_TIMEOUT;
+}
 
 static void app_task_handler(void * p_context)
 {
