@@ -27,6 +27,12 @@
 #define FLASH_START_CONFIG                                  (0x0002E000)
 #define FLASH_NVM_PAGES_SIZE                                (0x1000)
 
+#define FACTORY_INFO_START_ADDR                             FLASH_START_CONFIG
+#define FACTORY_INFO_PAGES_SIZE                             FLASH_NVM_PAGES_SIZE
+#define PCBA_TEST_FW_START_ADDR                             (FLASH_START_CONFIG + FLASH_NVM_PAGES_SIZE - 1)
+
+#define SEED_DEFAULT                                        "13989DDD23516A7147DFF970F020684F0A5ECFC44D261123E1E64EC706578E7E"
+
 typedef struct _key_state_t
 {
     bool is_low_power;
@@ -53,6 +59,7 @@ typedef struct _config_t
     uint8_t uuid_normal[UUID_LEN];
     uint8_t uuid_low_battery[UUID_LEN];
     uint8_t uuid_voltage[UUID_LEN];
+    uint8_t reserved[2];
 } config_t;
 
 typedef struct _scan_count_t
@@ -83,8 +90,6 @@ void clear_key_state_flashed_success(void);
 void set_key_state_flashed_failed(void);
 
 config_t* get_config(void);
-bool load_config_from_flash(void);
-ret_code_t store_config(config_t *config);
 bool parse_uuid_data(const char* uuidHexstr, uint8_t* out_sdata);
 bool parse_seed_data(const char* seed32Hexstr, uint8_t* out_sdata);
 void hex2str(const uint8_t* hex,uint16_t hex_len, uint8_t* str);

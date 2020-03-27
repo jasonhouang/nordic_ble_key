@@ -10,6 +10,7 @@
 #include "common.h"
 #include "sys_time.h"
 #include "adc_user.h"
+#include "flash_manage.h"
 
 #define UART_RX_MAX_DATA_LEN                128
 #define PARAM_SIZE                          UART_RX_MAX_DATA_LEN - 3

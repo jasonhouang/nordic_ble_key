@@ -47,6 +47,7 @@ SRC_FILES += \
   $(SDK_ROOT)/components/libraries/bsp/bsp.c \
   $(SDK_ROOT)/components/libraries/bsp/bsp_btn_ble.c \
   $(SDK_ROOT)/components/libraries/bsp/bsp_nfc.c \
+  $(SDK_ROOT)/components/libraries/crc32/crc32.c \
   $(PROJ_DIR)/main.c \
   $(PROJ_DIR)/sys_time.c \
   $(PROJ_DIR)/flash_manage.c \
@@ -54,7 +55,6 @@ SRC_FILES += \
   $(PROJ_DIR)/sm3.c \
   $(PROJ_DIR)/console.c \
   $(PROJ_DIR)/common.c \
-  $(PROJ_DIR)/crc32_st.c \
   $(PROJ_DIR)/dtm.c \
   $(PROJ_DIR)/adc_user.c \
   $(PROJ_DIR)/ble_dtm/ble_dtm.c \
@@ -78,6 +78,7 @@ SRC_FILES += \
   #$(SDK_ROOT)/components/libraries/uart/retarget.c \
   #$(SDK_ROOT)/components/ble/ble_dtm/ble_dtm.c \
   #$(SDK_ROOT)/components/ble/ble_dtm/ble_dtm_hw_nrf52.c \
+  #$(PROJ_DIR)/crc32_st.c \
 
 # Include folders common to all targets
 INC_FOLDERS += \

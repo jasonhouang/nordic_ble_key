@@ -7,7 +7,7 @@
 #include "common.h"
 
 static key_state_t key_state;
-static config_t config;
+static config_t config __attribute__((aligned));
 
 NRF_SECTION_ITEM_REGISTER(scan_count_section, static scan_count_t scan_count) = {0, SCAN_MAGIC_NUM};
 
@@ -150,53 +150,6 @@ static uint32_t check_sum_32(uint32_t * data, uint32_t words)
     return sum;
 }
 
-ret_code_t store_config(config_t *config)
-{
-    uint32_t err_code = NRF_ERROR_INTERNAL, event_num;
-    config_t read_config;
-
-    config->len = sizeof(config_t);
-    config->check_key = MAGIC_KEY;
-    config->check_sum = check_sum_32((uint32_t *)config + 1, (sizeof(config_t) >> 2)  - 1);
-
-    clear_key_state_flashed_success();
-
-    do {
-        err_code = sd_flash_page_erase(FLASH_START_CONFIG / FLASH_NVM_PAGES_SIZE);
-    } while (err_code == NRF_ERROR_BUSY);
-
-    while (!get_key_state()->is_flashed_success)
-    {
-        sd_app_evt_wait();
-        if (get_key_state()->is_flashed_failed)
-        {
-            clear_key_state_flashed_failed();
-            return NRF_ERROR_INTERNAL;
-        }
-    }
-
-    if (err_code == NRF_SUCCESS)
-    {
-        clear_key_state_flashed_success();
-
-        do {
-            err_code = sd_flash_write((uint32_t *)FLASH_START_CONFIG, (uint32_t *)config, sizeof(config_t) >> 2);
-        } while (err_code == NRF_ERROR_BUSY);
-
-        while (!get_key_state()->is_flashed_success)
-        {
-            sd_app_evt_wait();
-            if (get_key_state()->is_flashed_failed)
-            {
-                clear_key_state_flashed_failed();
-                return NRF_ERROR_INTERNAL;
-            }
-        }
-    }
-
-    return err_code;
-}
-
 static void hex_dump(uint32_t * addr, uint32_t words)
 {
     for (int i = 0; i < words; i++)
@@ -208,28 +161,6 @@ static void hex_dump(uint32_t * addr, uint32_t words)
         }
     }
     printf("\r\n");
-}
-
-bool load_config_from_flash(void)
-{
-    config_t * p_config_flash = (config_t *)FLASH_START_CONFIG;
-    uint32_t * p_flash = (uint32_t *)FLASH_START_CONFIG;
-    //hex_dump(p_flash, sizeof(config_t)/4);
-
-    if (p_config_flash->check_key == MAGIC_KEY)
-    {
-        if (p_config_flash->len <= FLASH_NVM_PAGES_SIZE)
-        {
-            uint32_t flash_checksum = check_sum_32((uint32_t *)p_flash + 1, (p_config_flash->len >> 2) - 1);
-            if (p_config_flash->check_sum == flash_checksum)
-            {
-                memcpy(&config, p_flash, p_config_flash->len);
-                return true;
-            }
-        }
-    }
-
-    return false;
 }
 
 bool parse_uuid_data(const char* uuidHexstr, uint8_t* out_sdata)

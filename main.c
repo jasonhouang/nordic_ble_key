@@ -27,6 +27,7 @@
 #include "crc32.h"
 #include "dtm.h"
 #include "adc_user.h"
+#include "flash_manage.h"
 
 #if defined (UART_PRESENT)
 #include "nrf_uart.h"
@@ -1669,6 +1670,7 @@ int main(void)
     log_init();
     wdt_init();
     init_sys_time();
+    flash_init();
 
     buttons_leds_init(&erase_bonds);
     APP_SCHED_INIT(APP_SCHED_MAX_EVENT_SIZE, APP_SCHED_QUEUE_SIZE);
